@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MlWidget</string>
+    <string name="w_mini">MlWidget 2×1</string>
+    <string name="w_small">MlWidget 2×2</string>
+    <string name="w_bar">MlWidget 4×1</string>
+    <string name="w_wide">MlWidget 4×2</string>
+    <string name="w_large">MlWidget 4×3</string>
+    <string name="w_desc">Scegli quale widget mostrare: orologi, meteo, batteria, note e altro</string>
+</resources>
