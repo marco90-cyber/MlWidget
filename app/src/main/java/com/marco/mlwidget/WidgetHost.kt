@@ -228,7 +228,7 @@ object WidgetUpdater {
     }
 
     private fun tapIntent(ctx: Context, t: Template, id: Int): PendingIntent {
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val pf = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         val open = Intent(ctx, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
         val i: Intent = when (t.tap) {
             "clock" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
@@ -240,7 +240,7 @@ object WidgetUpdater {
         }
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val resolved = i.resolveActivity(ctx.packageManager) != null
-        return PendingIntent.getActivity(ctx, id, if (resolved) i else open.putExtra("open", "edit:${t.id}"), flags)
+        return PendingIntent.getActivity(ctx, id, if (resolved) i else open.putExtra("open", "edit:${t.id}"), pf)
     }
 }
 
