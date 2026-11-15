@@ -76,10 +76,11 @@ class Template(
     val analog get() = kind == "analog"
     val usesWeather get() = kind == "weather" || kind == "glance" || (kind == "flip" && look == "sense") ||
         (kind == "analog" && look == "sense")
-    val usesBattery get() = kind == "battery" || kind == "device"
+    val usesBattery get() = kind == "battery" || kind == "device" || kind == "earbuds"
+    val usesSteps get() = kind == "steps"
     val usesMusic get() = kind == "music" || kind == "ipod"
     val usesCalendar get() = kind == "calendar" || kind == "tearoff"
-    val hasDigits get() = kind in setOf("digital", "flip", "lcd", "weather", "battery", "calendar", "glance", "device", "tearoff")
+    val hasDigits get() = kind in setOf("digital", "flip", "lcd", "weather", "battery", "calendar", "glance", "device", "tearoff", "steps", "earbuds")
     fun defaultCfg() = Cfg(style.copy())
 }
 
@@ -93,6 +94,9 @@ val CATEGORIES = listOf(
     "material" to "Material You",
     "ios" to "iOS",
     "sense" to "Sense",
+    "oneui" to "One UI",
+    "hyper" to "HyperOS",
+    "nothing" to "Nothing",
     "retro" to "Retrò",
     "minimal" to "Minimal"
 )

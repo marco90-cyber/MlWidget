@@ -85,7 +85,7 @@ object WidgetUpdater {
     fun onHome(ctx: Context): List<Template> = allIds(ctx).mapNotNull { Store.boundTemplate(ctx, it) }
 
     fun anyWeather(ctx: Context) = onHome(ctx).any { it.usesWeather }
-    fun anyBattery(ctx: Context) = onHome(ctx).any { it.usesBattery }
+    fun anyBattery(ctx: Context) = onHome(ctx).any { it.usesBattery || it.usesSteps }
 
     fun updateAllAsync(ctx: Context) {
         val app = ctx.applicationContext
@@ -93,6 +93,7 @@ object WidgetUpdater {
     }
 
     fun updateAll(ctx: Context) {
+        if (onHome(ctx).any { it.usesSteps }) StepsRepo.refresh(ctx)
         val m = AppWidgetManager.getInstance(ctx)
         allIds(ctx).forEach { update(ctx, m, it) }
     }
@@ -101,6 +102,7 @@ object WidgetUpdater {
     fun updateKindAsync(ctx: Context, kinds: Set<String>) {
         val app = ctx.applicationContext
         io.execute {
+            if ("steps" in kinds) StepsRepo.refresh(app)
             val m = AppWidgetManager.getInstance(app)
             allIds(app).forEach { id -> if (Store.boundTemplate(app, id)?.kind in kinds) update(app, m, id) }
         }
@@ -258,6 +260,9 @@ object WidgetUpdater {
         val i: Intent? = when (t.kind) {
             "digital", "analog", "flip", "lcd" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
             "battery" -> Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
+            "earbuds" -> Intent(Settings.ACTION_BLUETOOTH_SETTINGS)
+            "steps" -> if (!data.stepsAllowed) Intent(open).putExtra("open", "settings") else null
+            "quote" -> null
             "device" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
             "calendar", "tearoff" -> if (!data.calendarAllowed) Intent(open).putExtra("open", "calendar")
                 else Intent(Intent.ACTION_VIEW).setData(
@@ -365,7 +370,7 @@ class RefreshReceiver : BroadcastReceiver() {
             }
             BATTERY -> {
                 Refresh.scheduleBattery(app)
-                WidgetUpdater.updateKindAsync(app, setOf("battery", "device"))
+                WidgetUpdater.updateKindAsync(app, setOf("battery", "device", "earbuds", "steps"))
                 return
             }
             Intent.ACTION_PROVIDER_CHANGED -> {
@@ -400,7 +405,7 @@ object BatteryWatcher {
                 val charging = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
                 if (level != lastLevel || charging != lastCharging) {
                     lastLevel = level; lastCharging = charging
-                    WidgetUpdater.updateKindAsync(app, setOf("battery", "device"))
+                    WidgetUpdater.updateKindAsync(app, setOf("battery", "device", "earbuds"))
                 }
             }
         }
@@ -419,7 +424,7 @@ object BatteryWatcher {
                         val lv = i.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1)
                         if (dev != null && lv in 0..100 && hasBtPermission(app)) AccessoryCache.levels[dev.address] = lv
                     } catch (e: Throwable) { }
-                    WidgetUpdater.updateKindAsync(app, setOf("battery"))
+                    WidgetUpdater.updateKindAsync(app, setOf("battery", "earbuds"))
                 }
             }, bt, androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
         } catch (e: Exception) {

@@ -47,6 +47,32 @@ object Templates {
         Template("s_flipweather", "Cartellini con meteo", "sense", "flip", 4, 2, st(font = "condensed"), listOf("weather" to "Meteo (se c'è spazio)")),
         Template("s_flip", "Cartellini", "sense", "flip", 4, 1, st(font = "condensed", off = listOf("weather")), listOf("weather" to "Meteo (se c'è spazio)")),
 
+        // ------------------------------------------------------------------ One UI
+        Template("o_clock", "Orologio", "oneui", "digital", 4, 2, st(corner = 26), listOf(P_DATE)),
+        Template("o_weather", "Meteo", "oneui", "weather", 4, 2, st(corner = 26, off = listOf("details", "updated", "days")), P_WEATHER_ALL),
+        Template("o_battery", "Batteria", "oneui", "battery", 4, 2, st(corner = 26, colorSource = "custom", custom = 0xFF3E91FF.toInt()), listOf("accessories" to "Accessori Bluetooth")),
+        Template("o_calendar", "Calendario", "oneui", "calendar", 4, 2, st(corner = 26, colorSource = "custom", custom = 0xFF3E91FF.toInt()), P_CAL),
+        Template("o_music", "Musica", "oneui", "music", 4, 2, st(corner = 26, colorSource = "custom", custom = 0xFF3E91FF.toInt()), P_MUSIC),
+
+        // ------------------------------------------------------------------ HyperOS
+        Template("h_clock", "Orologio", "hyper", "digital", 4, 2, st(font = "light", corner = 24), listOf(P_DATE)),
+        Template("h_analog", "Orologio analogico", "hyper", "analog", 2, 2, st(dial = "hyper", hands = "round", corner = 24, colorSource = "custom", custom = 0xFFFF6A00.toInt()), listOf("date" to "Data (se c'è spazio)")),
+        Template("h_weather", "Meteo", "hyper", "weather", 2, 2, st(font = "light", corner = 24, off = listOf("details", "updated")), P_WEATHER_ALL),
+        Template("h_battery", "Batteria", "hyper", "battery", 2, 2, st(font = "light", corner = 24, colorSource = "custom", custom = 0xFF30C46B.toInt()), listOf("status" to "Stato", "accessories" to "Accessori Bluetooth")),
+        Template("h_calendar", "Calendario", "hyper", "calendar", 2, 2, st(corner = 24, colorSource = "custom", custom = 0xFFFF6A00.toInt()), P_CAL),
+        Template("h_note", "Note", "hyper", "note", 2, 2, st(font = "regular", corner = 24, colorSource = "custom", custom = 0xFFFFB300.toInt(), note = "Tocca per scrivere una nota")),
+
+        // ------------------------------------------------------------------ Nothing
+        Template("x_clock", "Orologio", "nothing", "digital", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED), listOf(P_DATE)),
+        Template("x_analog", "Orologio analogico", "nothing", "analog", 2, 2, st(dial = "nothing", hands = "nothing", seconds = true, corner = 26, colorSource = "custom", custom = NOTHING_RED), listOf("date" to "Data (se c'è spazio)")),
+        Template("x_weather", "Meteo", "nothing", "weather", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED, off = listOf("details", "updated", "days")), P_WEATHER_ALL),
+        Template("x_battery", "Batteria", "nothing", "battery", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED), listOf("status" to "Stato")),
+        Template("x_earbuds", "Cuffie e accessori", "nothing", "earbuds", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED)),
+        Template("x_steps", "Passi", "nothing", "steps", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED), listOf("goal" to "Obiettivo (8000 passi)")),
+        Template("x_quote", "Citazione del giorno", "nothing", "quote", 4, 2, st(font = "regular", corner = 26, colorSource = "custom", custom = NOTHING_RED)),
+        Template("x_calendar", "Calendario", "nothing", "calendar", 2, 2, st(font = "dot", corner = 26, colorSource = "custom", custom = NOTHING_RED), P_CAL),
+        Template("x_search", "Ricerca", "nothing", "search", 4, 1, st(font = "regular", corner = 40, colorSource = "custom", custom = NOTHING_RED)),
+
         // ------------------------------------------------------------------ Retrò
         Template("r_flip", "Orologio a cartellini", "retro", "flip", 4, 2, st(font = "condensed"), listOf(P_DATE)),
         Template("r_lcd", "Sveglia LCD", "retro", "lcd", 4, 2, st(font = "mono", corner = 18), listOf(P_DATE)),
@@ -64,6 +90,8 @@ object Templates {
     fun byId(id: String) = all.firstOrNull { it.id == id }
 }
 
+const val NOTHING_RED = 0xFFD71921.toInt()
+
 val DIALS = listOf(
     "minimal" to "Tacche",
     "numbers" to "Numeri",
@@ -72,12 +100,15 @@ val DIALS = listOf(
     "roman" to "Numeri romani",
     "sense" to "Sensation (argento)",
     "bare" to "Quattro tacche",
+    "hyper" to "HyperOS",
+    "nothing" to "Nothing",
     "none" to "Nessuno"
 )
 
 val HANDS = listOf(
     "round" to "Arrotondate",
     "ios" to "iOS",
+    "nothing" to "Nothing",
     "thin" to "Sottili",
     "sense" to "Affusolate (Sensation)",
     "dauphine" to "Dauphine",
@@ -102,7 +133,8 @@ val FONTS = listOf(
     "medium" to "Medio",
     "bold" to "Grassetto",
     "condensed" to "Stretto",
-    "mono" to "Digitale"
+    "mono" to "Digitale",
+    "dot" to "A puntini (Nothing)"
 )
 
 val COLOR_SOURCES = listOf(

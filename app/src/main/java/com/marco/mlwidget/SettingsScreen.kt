@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ListAlt
@@ -141,6 +142,10 @@ fun SettingsScreen(onBack: () -> Unit, onLog: () -> Unit) {
                 icon = Icons.Outlined.MusicNote
             ) { MusicRepo.openAccessSettings(ctx) }
             MLNavRow(
+                "Passi", if (StepsRepo.hasPermission(ctx)) "Attivo" else "Attività fisica, per il widget dei passi",
+                icon = Icons.Outlined.DirectionsWalk, trailing = null
+            ) { if (!StepsRepo.hasPermission(ctx)) other.launch(Manifest.permission.ACTIVITY_RECOGNITION) }
+            MLNavRow(
                 "Accessori Bluetooth", if (hasBtPermission(ctx)) "Attivo" else "Per la batteria di cuffie e orologi",
                 icon = Icons.Outlined.Bluetooth, trailing = null
             ) { if (!hasBtPermission(ctx)) other.launch(Manifest.permission.BLUETOOTH_CONNECT) }
@@ -169,9 +174,10 @@ private fun InfoDialog(onDismiss: () -> Unit) {
         title = { Text("MlWidget") },
         text = {
             Text(
-                "Widget per la Home in tanti stili (Material You, iOS, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano.\n\n" +
+                "Widget per la Home in tanti stili (Material You, iOS, One UI, HyperOS, Nothing, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano.\n\n" +
                     "Dati meteo: Open-Meteo (open-meteo.com), licenza CC BY 4.0.\n" +
-                    "Nome della località: BigDataCloud (bigdatacloud.com)."
+                    "Nome della località: BigDataCloud (bigdatacloud.com).\n" +
+                    "Carattere a puntini: Doto, licenza SIL Open Font License."
             )
         }
     )

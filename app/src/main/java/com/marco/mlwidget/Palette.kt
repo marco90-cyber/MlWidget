@@ -165,6 +165,9 @@ object Palettes {
         }
         "ios" -> "ios"
         "retro" -> "retro"
+        "oneui" -> "oneui"
+        "hyper" -> "hyper"
+        "nothing" -> "nothing"
         else -> "none"
     }
 
@@ -190,6 +193,24 @@ object Palettes {
                 dimC = 0xFF8E8E93.toInt()
                 accent = vivid(ctx, s, dark)
             }
+            "oneui" -> {
+                bg = if (dark) 0xFF232323.toInt() else 0xFFFCFCFC.toInt()
+                text = if (dark) 0xFFFAFAFA.toInt() else 0xFF111111.toInt()
+                dimC = if (dark) 0xFFA0A0A0.toInt() else 0xFF767676.toInt()
+                accent = vivid(ctx, s, dark)
+            }
+            "hyper" -> {
+                bg = if (dark) 0xFF1E1F22.toInt() else 0xFFF5F6F8.toInt()
+                text = if (dark) 0xFFF2F2F2.toInt() else 0xFF1A1A1A.toInt()
+                dimC = if (dark) 0xFF9A9CA1.toInt() else 0xFF7C7E83.toInt()
+                accent = vivid(ctx, s, dark)
+            }
+            "nothing" -> {
+                bg = if (dark) 0xFF1B1B1B.toInt() else 0xFFEFEFEF.toInt()
+                text = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+                dimC = 0xFF8A8A8A.toInt()
+                accent = vivid(ctx, s, dark)
+            }
             "retro" -> {
                 bg = if (dark) 0xFF1B1B1D.toInt() else 0xFFECE6D8.toInt()
                 text = if (dark) 0xFFEDEDED.toInt() else 0xFF2A2622.toInt()
@@ -209,7 +230,7 @@ object Palettes {
             }
             else -> { bg = if (dark) t.a1(30) else t.a1(90); text = if (dark) t.a1(90) else t.a1(10); accent = if (dark) t.a1(80) else t.a1(40) }
         }
-        if (s.colorSource == "custom" && kind !in setOf("ios", "retro", "filled")) {
+        if (s.colorSource == "custom" && kind !in setOf("ios", "retro", "filled", "oneui", "hyper", "nothing")) {
             // colore personale: l'accento resta riconoscibile ma leggibile sul fondo
             accent = if (dark) t.a1(80) else t.a1(40)
         }
@@ -219,7 +240,12 @@ object Palettes {
             text = text,
             dim = dimC ?: ColorUtils.setAlphaComponent(text, 190),
             accent = accent,
-            face = if (kind == "ios") (if (dark) 0xFF2C2C2E.toInt() else 0xFFF2F2F7.toInt()) else if (dark) t.n1(12) else t.n1(99),
+            face = when (kind) {
+                "ios" -> if (dark) 0xFF2C2C2E.toInt() else 0xFFF2F2F7.toInt()
+                "nothing" -> if (dark) 0xFF2A2A2A.toInt() else 0xFFE2E2E2.toInt()
+                "oneui", "hyper" -> if (dark) 0xFF2E2F33.toInt() else 0xFFEBECEF.toInt()
+                else -> if (dark) t.n1(12) else t.n1(99)
+            },
             faceInk = if (dark) t.n1(90) else t.n1(10),
             tick = if (dark) t.n2(70) else t.n2(40),
             track = ColorUtils.setAlphaComponent(text, 40),

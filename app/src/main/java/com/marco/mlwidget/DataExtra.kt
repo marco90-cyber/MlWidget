@@ -309,3 +309,103 @@ class MediaListener : NotificationListenerService() {
         handler.postDelayed(pending, 400)
     }
 }
+
+// ---------------------------------------------------------------------------------------------
+//  Passi (contapassi del telefono)
+// ---------------------------------------------------------------------------------------------
+
+object StepsRepo {
+    const val GOAL = 8000
+
+    fun hasPermission(ctx: Context) =
+        ctx.checkSelfPermission(android.Manifest.permission.ACTIVITY_RECOGNITION) == PackageManager.PERMISSION_GRANTED
+
+    fun available(ctx: Context) =
+        ctx.getSystemService(android.hardware.SensorManager::class.java)?.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER) != null
+
+    private fun sp(ctx: Context) = ctx.getSharedPreferences("steps", Context.MODE_PRIVATE)
+    private fun today() = Calendar.getInstance().let { it.get(Calendar.YEAR) * 1000 + it.get(Calendar.DAY_OF_YEAR) }
+
+    /** Passi di oggi già letti (non blocca). */
+    fun cached(ctx: Context): Int = if (sp(ctx).getInt("day", 0) == today()) sp(ctx).getInt("today", 0) else 0
+
+    /** Legge il contatore del telefono (aspetta al massimo un secondo). Da chiamare fuori dal thread principale. */
+    fun refresh(ctx: Context): Int {
+        if (!hasPermission(ctx)) return 0
+        val sm = ctx.getSystemService(android.hardware.SensorManager::class.java) ?: return cached(ctx)
+        val sensor = sm.getDefaultSensor(android.hardware.Sensor.TYPE_STEP_COUNTER) ?: return cached(ctx)
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var value = -1f
+        val l = object : android.hardware.SensorEventListener {
+            override fun onSensorChanged(e: android.hardware.SensorEvent) { value = e.values[0]; latch.countDown() }
+            override fun onAccuracyChanged(s: android.hardware.Sensor?, a: Int) {}
+        }
+        val thread = android.os.HandlerThread("passi").apply { start() }
+        try {
+            sm.registerListener(l, sensor, android.hardware.SensorManager.SENSOR_DELAY_NORMAL, android.os.Handler(thread.looper))
+            latch.await(1200, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: Exception) {
+        } finally {
+            sm.unregisterListener(l)
+            thread.quitSafely()
+        }
+        if (value < 0f) return cached(ctx)
+        val total = value.toLong()
+        val p = sp(ctx)
+        val day = today()
+        var base = p.getLong("base", -1L)
+        // nuovo giorno o telefono riavviato (il contatore riparte da zero)
+        if (p.getInt("day", 0) != day || base < 0L || total < base) {
+            base = if (p.getInt("day", 0) == day && total < base) total - p.getInt("today", 0) else total
+            if (base < 0L) base = 0L
+        }
+        val steps = (total - base).toInt().coerceAtLeast(0)
+        p.edit().putInt("day", day).putLong("base", base).putInt("today", steps).apply()
+        return steps
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+//  Citazione del giorno: proverbi e curiosità, una diversa ogni giorno
+// ---------------------------------------------------------------------------------------------
+
+object Quotes {
+    val list = listOf(
+        "Chi va piano va sano e va lontano." to "Proverbio",
+        "Il miele è l'unico alimento che non scade: se ne è trovato di commestibile nelle tombe egizie." to "Curiosità",
+        "Chi ben comincia è a metà dell'opera." to "Proverbio",
+        "Un fulmine è circa cinque volte più caldo della superficie del Sole." to "Curiosità",
+        "Non tutte le ciambelle riescono col buco." to "Proverbio",
+        "Le giraffe dormono meno di due ore al giorno, spesso in brevi riposini." to "Curiosità",
+        "L'appetito vien mangiando." to "Proverbio",
+        "Il cuore di una balenottera azzurra può pesare quanto un'automobile." to "Curiosità",
+        "Tra il dire e il fare c'è di mezzo il mare." to "Proverbio",
+        "Venere ruota così lentamente che il suo giorno dura più del suo anno." to "Curiosità",
+        "Chi trova un amico trova un tesoro." to "Proverbio",
+        "I polpi hanno tre cuori e il sangue blu." to "Curiosità",
+        "Rosso di sera, bel tempo si spera." to "Proverbio",
+        "La Torre Eiffel d'estate può allungarsi di oltre dieci centimetri per il caldo." to "Curiosità",
+        "Meglio tardi che mai." to "Proverbio",
+        "Le api comunicano dove sono i fiori con una danza." to "Curiosità",
+        "Sbagliando s'impara." to "Proverbio",
+        "Sulla Luna le impronte degli astronauti possono restare per milioni di anni." to "Curiosità",
+        "Chi semina vento raccoglie tempesta." to "Proverbio",
+        "Le lontre di mare si tengono per mano mentre dormono per non allontanarsi." to "Curiosità",
+        "L'abito non fa il monaco." to "Proverbio",
+        "Un giorno su Mercurio dura circa 176 giorni terrestri." to "Curiosità",
+        "Volere è potere." to "Proverbio",
+        "Le banane sono bacche, le fragole invece no." to "Curiosità",
+        "Chi dorme non piglia pesci." to "Proverbio",
+        "Il corpo umano contiene abbastanza ferro per fare un piccolo chiodo." to "Curiosità",
+        "Paese che vai, usanza che trovi." to "Proverbio",
+        "I koala dormono fino a 20 ore al giorno." to "Curiosità",
+        "Non c'è rosa senza spine." to "Proverbio",
+        "La luce del Sole impiega circa 8 minuti per arrivare sulla Terra." to "Curiosità",
+        "Il tempo è galantuomo." to "Proverbio"
+    )
+
+    fun today(now: Long): Pair<String, String> {
+        val c = Calendar.getInstance().apply { timeInMillis = now }
+        return list[(c.get(Calendar.YEAR) * 366 + c.get(Calendar.DAY_OF_YEAR)) % list.size]
+    }
+}

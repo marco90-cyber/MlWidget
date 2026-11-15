@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Generato: immagine del widget + orologio analogico + 4 posti per gli orologi digitali
-     (6 caratteri, con e senza ombra) + 3 zone da toccare (tasti della musica). -->
+     (7 caratteri, con e senza ombra) + 3 zone da toccare (tasti della musica). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
@@ -76,6 +76,16 @@
         android:layout_gravity="top|start"
         android:fontFamily="monospace"
         android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s0_dot"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
@@ -168,6 +178,20 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s0_dot_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s1_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -226,6 +250,16 @@
         android:layout_gravity="top|start"
         android:fontFamily="monospace"
         android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s1_dot"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
@@ -318,6 +352,20 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s1_dot_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s2_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -376,6 +424,16 @@
         android:layout_gravity="top|start"
         android:fontFamily="monospace"
         android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s2_dot"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
@@ -468,6 +526,20 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s2_dot_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s3_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -526,6 +598,16 @@
         android:layout_gravity="top|start"
         android:fontFamily="monospace"
         android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s3_dot"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
@@ -609,6 +691,20 @@
         android:layout_gravity="top|start"
         android:fontFamily="monospace"
         android:textStyle="bold"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s3_dot_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="@font/doto"
         android:shadowColor="#99000000"
         android:shadowDx="0"
         android:shadowDy="1"

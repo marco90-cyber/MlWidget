@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.DirectionsWalk
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MusicNote
@@ -211,7 +212,12 @@ private fun PermissionGroup(t: Template) {
             MusicRepo.openAccessSettings(ctx)
         }
     }
-    if (t.kind == "battery" && !hasBtPermission(ctx)) rows += {
+    if (t.usesSteps && !StepsRepo.hasPermission(ctx)) rows += {
+        MLNavRow("Conta i passi", "Serve il permesso dell'attività fisica", icon = Icons.Outlined.DirectionsWalk) {
+            perm.launch(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
+    }
+    if ((t.kind == "battery" || t.kind == "earbuds") && !hasBtPermission(ctx)) rows += {
         MLNavRow("Batteria degli accessori", "Cuffie e orologi Bluetooth", icon = Icons.Outlined.Bluetooth) {
             perm.launch(Manifest.permission.BLUETOOTH_CONNECT)
         }

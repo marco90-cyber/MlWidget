@@ -1,6 +1,6 @@
 # MlWidget
 
-Widget per la Home divisi per stile (Material You, iOS, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano al massimo.
+Widget per la Home divisi per stile (Material You, iOS, One UI, HyperOS, Nothing, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano al massimo.
 
 ## Cosa si può fare
 - Aprire l'app e vedere tutti i widget divisi per stile
@@ -20,6 +20,9 @@ Widget per la Home divisi per stile (Material You, iOS, Sense, Retrò, Minimal),
 |---|---|
 | Material You | Orologio, Orologio analogico, In breve, Meteo, Batteria, Calendario, Musica, Dispositivo, Nota, Ricerca |
 | iOS | Orologio, Meteo, Batterie, Calendario, Musica, Note |
+| One UI | Orologio, Meteo, Batteria, Calendario, Musica |
+| HyperOS | Orologio, Orologio analogico, Meteo, Batteria (a riempimento), Calendario, Note |
+| Nothing | Orologio, Orologio analogico, Meteo, Batteria, Cuffie e accessori, Passi, Citazione del giorno, Calendario, Ricerca |
 | Sense | Orologio Sensation, Cartellini con meteo, Cartellini |
 | Retrò | Orologio a cartellini, Sveglia LCD, iPod, Calendario a strappo |
 | Minimal | Ora, Lancette, Meteo in una riga, Batteria a linea, Musica in una riga |
@@ -36,3 +39,7 @@ Ogni widget **si adatta da solo** alla grandezza (2×1, 2×2, 4×1, 4×2, 4×3..
 ## Build
 Ogni push su `main` crea l'APK firmato con GitHub Actions e lo pubblica nelle **Release**.
 Per firmarlo con la propria chiave servono i Secrets `KEYSTORE_B64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` (come nelle altre MLapps); senza, l'APK usa la firma di debug.
+
+## Crediti
+- Meteo: [Open-Meteo](https://open-meteo.com) (CC BY 4.0)
+- Carattere a puntini: [Doto](https://github.com/oliverlalan/Doto), SIL Open Font License (vedi `LICENSE-Doto-OFL.txt`)

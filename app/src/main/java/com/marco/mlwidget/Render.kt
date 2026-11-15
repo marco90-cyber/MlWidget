@@ -37,9 +37,11 @@ class WData(
     val track: Track?,
     val musicAllowed: Boolean,
     val now: Long,
-    val is24: Boolean
+    val is24: Boolean,
+    val steps: Int = 0,
+    val stepsAllowed: Boolean = true
 ) {
-    fun at(time: Long) = WData(weather, battery, device, events, calendarAllowed, track, musicAllowed, time, is24)
+    fun at(time: Long) = WData(weather, battery, device, events, calendarAllowed, track, musicAllowed, time, is24, steps, stepsAllowed)
 
     companion object {
         /** Con [sample] i dati che mancano vengono riempiti con un esempio (per le anteprime). */
@@ -53,7 +55,9 @@ class WData(
             return WData(
                 WeatherRepo.cached(ctx) ?: if (sample) Weather.sample() else null,
                 readBattery(ctx), readDevice(ctx), events, calOk || sample, track, MusicRepo.hasAccess(ctx) || sample,
-                System.currentTimeMillis(), DateFormat.is24HourFormat(ctx)
+                System.currentTimeMillis(), DateFormat.is24HourFormat(ctx),
+                StepsRepo.cached(ctx).let { if (sample && it == 0) 5234 else it },
+                StepsRepo.hasPermission(ctx) || sample
             )
         }
 
@@ -102,7 +106,15 @@ object Renderer {
         "medium" -> Typeface.create("sans-serif-medium", Typeface.NORMAL)
         "condensed" -> Typeface.create("sans-serif-condensed", Typeface.BOLD)
         "mono" -> Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        "dot" -> dot ?: Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         else -> Typeface.create("sans-serif", Typeface.BOLD)
+    }
+
+    /** Carattere a puntini (Doto, licenza OFL), caricato all'avvio dell'app. */
+    @Volatile var dot: Typeface? = null
+
+    fun loadFonts(ctx: Context) {
+        if (dot == null) dot = try { androidx.core.content.res.ResourcesCompat.getFont(ctx, R.font.doto) } catch (e: Exception) { null }
     }
 
     fun textPaint(size: Float, color: Int, tf: Typeface, pal: Pal?) = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -184,9 +196,13 @@ private class Painter(
     fun on(key: String) = cfg.on(key)
     fun fmt(p: String) = SimpleDateFormat(p, loc).format(now)
     fun cap(x: String) = x.replaceFirstChar { it.titlecase(loc) }
-    val weekday get() = cap(fmt("EEEE"))
-    val dayMonth get() = fmt("d MMMM")
-    val shortDate get() = cap(fmt("EEE d MMM").replace(".", ""))
+    val nothingLook = t.look == "nothing"
+    fun up(x: String) = if (nothingLook) x.uppercase(loc) else x
+    val weekday get() = up(cap(fmt("EEEE")))
+    val dayMonth get() = up(fmt("d MMMM"))
+    val shortDate get() = up(cap(fmt("EEE d MMM").replace(".", "")))
+    /** Carattere per date e scritte piccole: a puntini con Nothing. */
+    val tfD: Typeface get() = if (nothingLook) Renderer.typeface("dot") else tfM
 
     // ------------------------------------------------------------------ strumenti
 
@@ -307,8 +323,18 @@ private class Painter(
         c.drawRoundRect(RectF(r.left, r.top, r.left + fw, r.bottom), rad, rad, paint(color))
     }
 
-    fun icon(cx: Float, cy: Float, size: Float, code: Int, isDay: Boolean) =
-        WeatherIcons.draw(c, RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2), code, isDay)
+    /** Con lo stile Nothing le icone sono di un solo colore. */
+    val monoIcon: Int? = if (t.look == "nothing") pal.text else null
+
+    fun icon(cx: Float, cy: Float, size: Float, code: Int, isDay: Boolean) {
+        val r = RectF(cx - size / 2, cy - size / 2, cx + size / 2, cy + size / 2)
+        val mono = monoIcon
+        if (mono == null) { WeatherIcons.draw(c, r, code, isDay); return }
+        val save = c.saveLayer(r, null)
+        WeatherIcons.draw(c, r, code, isDay)
+        c.drawColor(mono, android.graphics.PorterDuff.Mode.SRC_IN)
+        c.restoreToCount(save)
+    }
 
     fun bitmap(b: Bitmap, r: RectF, radius: Float) {
         val sh = BitmapShader(b, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP)
@@ -334,11 +360,17 @@ private class Painter(
             "lcd" -> lcd()
             "weather" -> when (t.look) {
                 "ios" -> weatherIos()
+                "oneui" -> weatherOneUi()
+                "hyper" -> weatherHyper()
+                "nothing" -> weatherNothing()
                 "minimal" -> weatherMinimal()
                 else -> weatherMaterial()
             }
             "battery" -> when (t.look) {
                 "ios" -> batteryIos()
+                "oneui" -> batteryOneUi()
+                "hyper" -> batteryHyper()
+                "nothing" -> batteryNothing()
                 "minimal" -> batteryMinimal()
                 else -> batteryMaterial()
             }
@@ -350,6 +382,9 @@ private class Painter(
             "glance" -> glance()
             "note" -> note()
             "search" -> search()
+            "earbuds" -> earbuds()
+            "steps" -> steps()
+            "quote" -> quote()
         }
     }
 
@@ -357,9 +392,14 @@ private class Painter(
 
     fun digital() {
         background()
-        val minimal = t.look == "minimal"
+        val minimal = t.look == "minimal" || t.look == "hyper"
+        val nothing = t.look == "nothing"
         val hc = pal.text
-        val mc = if (minimal) pal.text else pal.accent
+        val mc = if (t.look == "material") pal.accent else pal.text
+        if (nothing) {
+            // il puntino rosso di Nothing
+            c.drawCircle(w - m * 0.1f, m * 0.1f, m * 0.035f, paint(pal.accent))
+        }
         val pad = (m * 0.12f).coerceIn(8f, 20f)
         val ratio = w / h
         val date = on("date")
@@ -373,8 +413,8 @@ private class Painter(
                 val ds = (h * 0.15f).coerceIn(10f, 20f)
                 val maxW = w - pad * 2 - tw - 6f
                 val long = maxW > ds * 7
-                text(if (long) weekday else cap(fmt("EEE").replace(".", "")), w - pad, h * 0.5f - lineH(ds) * 0.55f, ds, pal.text, tfM, "right", maxW)
-                text(if (long) dayMonth else fmt("d MMM").replace(".", ""), w - pad, h * 0.5f + lineH(ds) * 0.55f, ds, pal.dim, tfR, "right", maxW)
+                text(if (long) weekday else up(cap(fmt("EEE").replace(".", ""))), w - pad, h * 0.5f - lineH(ds) * 0.55f, ds, pal.text, tfD, "right", maxW)
+                text(if (long) dayMonth else up(fmt("d MMM").replace(".", "")), w - pad, h * 0.5f + lineH(ds) * 0.55f, ds, pal.dim, if (nothingLook) tfD else tfR, "right", maxW)
             }
         } else if (ratio >= 1.25f) {
             // ora grande con la data sotto
@@ -384,7 +424,7 @@ private class Painter(
             val r = clock(RectF(pad, pad * 0.6f, w - pad, h - pad * 0.6f - dateH), al, hc, mc, secs = s.seconds)
             if (dateH > 0f) {
                 val x = if (al == "center") w / 2 else r.left + 2f
-                text("$weekday $dayMonth", x, r.bottom + lineH(ds) * 0.45f, ds, pal.text, tfM, al, w - pad * 2)
+                text("$weekday $dayMonth", x, r.bottom + lineH(ds) * 0.45f, ds, pal.text, tfD, al, w - pad * 2)
             }
         } else {
             // quadrato o alto: ore sopra i minuti
@@ -400,7 +440,7 @@ private class Painter(
             val x0 = if (al == "center") box1.left else box1.left
             liveText(RectF(x0, box1.centerY() + size * 0.04f, box1.right, box1.centerY() + size * 0.04f), size, "HH", "hh", hc, s.font, tfNum, al, pal.shadow)
             liveText(RectF(x0, box2.centerY() - size * 0.04f, box2.right, box2.centerY() - size * 0.04f), size, "mm", "mm", mc, s.font, tfNum, al, pal.shadow)
-            if (dateH > 0f) text(shortDate, if (al == "center") w / 2 else pad + 2f, h - pad * 0.6f - lineH(ds) / 2, ds, pal.text, tfM, al, w - pad * 2)
+            if (dateH > 0f) text(shortDate, if (al == "center") w / 2 else pad + 2f, h - pad * 0.6f - lineH(ds) / 2, ds, pal.text, tfD, al, w - pad * 2)
         }
     }
 
@@ -1416,6 +1456,323 @@ private class Painter(
         c.drawLine(cx + ic * 0.14f, cy + ic * 0.14f, cx + ic * 0.4f, cy + ic * 0.4f, ip)
         text(s.note.ifBlank { "Cerca" }, cx + ic * 0.8f, cy, r.height() * 0.32f, ColorUtils.setAlphaComponent(ink, 200), tfR, "left", r.right - cx - ic, shadow = false)
     }
+
+    // ------------------------------------------------------------------ One UI
+
+    fun weatherOneUi() {
+        val x = wx
+        val sky = pal.bgKind == "oneui"
+        val white = 0xFFFFFFFF.toInt()
+        if (sky) {
+            // colori morbidi come il meteo di Samsung
+            val cols = when {
+                x == null -> intArrayOf(0xFF6F8FB8.toInt(), 0xFF8FAAD0.toInt())
+                !x.isDay -> intArrayOf(0xFF27315A.toInt(), 0xFF475484.toInt())
+                x.code in 51..99 -> intArrayOf(0xFF5A6F86.toInt(), 0xFF7F93A9.toInt())
+                x.code == 3 || x.code == 45 || x.code == 48 -> intArrayOf(0xFF7E8EA6.toInt(), 0xFFA3B1C6.toInt())
+                else -> intArrayOf(0xFF3E8CF0.toInt(), 0xFF7DB8FA.toInt())
+            }
+            val r = s.corner.toFloat().coerceAtMost(m / 2f)
+            c.drawRoundRect(RectF(0f, 0f, w, h), r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(0f, 0f, w, h, cols, null, Shader.TileMode.CLAMP)
+                alpha = s.opacity * 255 / 100
+            })
+        } else background()
+        val ink = if (sky) white else pal.text
+        val dim = if (sky) 0xDDFFFFFF.toInt() else pal.dim
+        if (x == null) return noWeather(ink)
+        val pad = (m * 0.11f).coerceIn(10f, 18f)
+        val wide = w >= 250f
+        val hoursOn = on("hours") && wide && h >= 150f
+        val top = if (hoursOn) h * 0.55f else h
+        val fs = (min(top, w) * 0.09f).coerceIn(10f, 16f)
+        // località con il segnaposto
+        var y = pad + lineH(fs) * 0.5f
+        if (on("place")) {
+            pin(pad + fs * 0.4f, y, fs * 0.9f, ink)
+            text(x.place.ifBlank { "Posizione" }, pad + fs * 1.05f, y, fs, ink, tfB, "left", w * 0.6f, shadow = false)
+        }
+        val ts = min(top * 0.42f, w * (if (wide) 0.2f else 0.32f))
+        y = pad + lineH(fs) + lineH(ts) * 0.45f
+        text("${x.temp}°", pad - ts * 0.03f, y, ts, ink, tfNum, "left", w * 0.6f, shadow = false)
+        val ic = min(top - pad * 1.6f, w * 0.36f)
+        icon(w - pad - ic / 2, pad * 0.8f + ic / 2, ic, x.code, x.isDay)
+        var by = top - pad * 0.8f - lineH(fs) * 0.5f
+        if (on("hilo")) { text("${x.hi}° / ${x.lo}°", pad, by, fs, dim, tfM, "left", w * 0.6f, shadow = false); by -= lineH(fs) }
+        if (on("cond") && by > y + lineH(ts) * 0.4f) text(weatherText(x.code), pad, by, fs, ink, tfM, "left", w * 0.6f, shadow = false)
+        if (hoursOn) {
+            c.drawRoundRect(RectF(pad * 0.6f, top, w - pad * 0.6f, h - pad * 0.6f), 16f, 16f, paint(if (sky) 0x26FFFFFF else pal.track))
+            hoursRow(x, RectF(pad, top + 4f, w - pad, h - pad * 0.6f - 4f), ink, dim)
+        }
+    }
+
+    fun pin(cx: Float, cy: Float, sz: Float, col: Int) {
+        val p = Path().apply {
+            addCircle(cx, cy - sz * 0.15f, sz * 0.32f, Path.Direction.CW)
+            moveTo(cx - sz * 0.3f, cy - sz * 0.05f); lineTo(cx, cy + sz * 0.5f); lineTo(cx + sz * 0.3f, cy - sz * 0.05f); close()
+        }
+        c.drawPath(p, paint(col))
+        c.drawCircle(cx, cy - sz * 0.15f, sz * 0.12f, paint(0x55000000))
+    }
+
+    fun batteryOneUi() {
+        background()
+        val b = d.battery
+        val devs = listOf(Accessory("Telefono", b.level, "phone")) + accessories()
+        val pad = (m * 0.1f).coerceIn(10f, 18f)
+        if (w < h * 1.3f && w < 200f) {
+            // piccolo: anello grande con il telefono
+            val fs = (m * 0.12f).coerceIn(11f, 18f)
+            val rr = (min(w, h - lineH(fs)) - pad * 2) / 2
+            val col = if (Renderer.low(b)) Renderer.RED else pal.accent
+            ring(w / 2, pad + rr, rr, b.level / 100f, col, sw = rr * 0.12f)
+            deviceGlyph("phone", w / 2, pad + rr, rr * 0.7f, pal.text)
+            text("${b.level}%", w / 2, h - pad * 0.7f - lineH(fs) * 0.4f, fs, pal.text, tfB, "center")
+            return
+        }
+        // elenco con icona tonda, nome, percentuale e barra
+        val n = ((h - pad * 2) / 40f).toInt().coerceIn(1, 4)
+        val rows = devs.take(n)
+        val rh = (h - pad * 2) / n
+        rows.forEachIndexed { i, a ->
+            val cy = pad + rh * (i + 0.5f)
+            val ir = min(rh * 0.36f, 20f)
+            c.drawCircle(pad + ir, cy, ir, paint(pal.face))
+            deviceGlyph(a.kind, pad + ir, cy, ir * 1.1f, pal.text)
+            if (i == 0 && b.charging) bolt(pad + ir * 1.8f, cy - ir * 0.8f, ir * 0.35f, pal.accent)
+            val fs = (rh * 0.28f).coerceIn(10f, 15f)
+            val tx = pad + ir * 2 + pad * 0.7f
+            text(if (i == 0) "Telefono" else a.name, tx, cy - lineH(fs) * 0.35f, fs, pal.text, tfM, "left", w - tx - pad - fs * 3)
+            text("${a.level}%", w - pad, cy - lineH(fs) * 0.35f, fs, pal.text, tfB, "right")
+            val low = a.level <= 15 && !(i == 0 && b.charging)
+            bar(RectF(tx, cy + lineH(fs) * 0.35f, w - pad, cy + lineH(fs) * 0.35f + 4f), a.level / 100f, if (low) Renderer.RED else pal.accent)
+        }
+    }
+
+    // ------------------------------------------------------------------ HyperOS
+
+    fun weatherHyper() {
+        val x = wx
+        val tinted = pal.bgKind == "hyper"
+        if (tinted) {
+            val base = when {
+                x == null -> 0xFF8FA7C8.toInt()
+                !x.isDay -> 0xFF2D3A63.toInt()
+                x.code in 51..99 -> 0xFF6A7D92.toInt()
+                x.code == 3 || x.code == 45 || x.code == 48 -> 0xFF8C9BB0.toInt()
+                else -> 0xFF4AA3F5.toInt()
+            }
+            val top = if (pal.dark) shade(base, 0.35f) else base
+            val bot = if (pal.dark) shade(base, 0.6f) else tint(base, 0.35f)
+            val r = s.corner.toFloat().coerceAtMost(m / 2f)
+            c.drawRoundRect(RectF(0f, 0f, w, h), r, r, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(0f, 0f, 0f, h, top, bot, Shader.TileMode.CLAMP)
+                alpha = s.opacity * 255 / 100
+            })
+            // un grande cerchio di luce come negli sfondi di HyperOS
+            c.drawCircle(w * 0.85f, h * 0.1f, m * 0.7f, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = RadialGradient(w * 0.85f, h * 0.1f, m * 0.7f, 0x40FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP)
+            })
+        } else background()
+        val ink = if (tinted) 0xFFFFFFFF.toInt() else pal.text
+        val dim = if (tinted) 0xCCFFFFFF.toInt() else pal.dim
+        if (x == null) return noWeather(ink)
+        val pad = (m * 0.1f).coerceIn(10f, 18f)
+        val wide = w >= 250f
+        val ts = min(h * 0.42f, w * (if (wide) 0.24f else 0.42f))
+        text("${x.temp}°", pad - ts * 0.04f, pad + lineH(ts) * 0.42f, ts, ink, tfNum, "left", w * 0.62f, shadow = false)
+        val ic = min(h * 0.38f, w * 0.34f)
+        icon(w - pad - ic / 2, pad + ic / 2, ic, x.code, x.isDay)
+        val fs = (m * 0.085f).coerceIn(10f, 15f)
+        var by = h - pad - lineH(fs) * 0.5f
+        if (on("hilo")) { text("${x.hi}° / ${x.lo}°", pad, by, fs, dim, tfR, "left", w * 0.6f, shadow = false) }
+        if (on("place")) text(x.place, w - pad, by, fs, dim, tfR, "right", w * 0.4f, shadow = false)
+        by -= lineH(fs)
+        if (on("cond")) text(weatherText(x.code), pad, by, fs * 1.15f, ink, tfM, "left", w - pad * 2, shadow = false)
+        if (wide && on("hours") && h >= 150f) hoursRow(x, RectF(w * 0.45f, pad + ic + 4f, w - pad, by - lineH(fs)), ink, dim)
+    }
+
+    fun batteryHyper() {
+        background()
+        val b = d.battery
+        val pad = (m * 0.1f).coerceIn(10f, 18f)
+        val col = if (Renderer.low(b)) Renderer.RED else pal.accent
+        // pila che si riempie dal basso
+        val tall = h >= w * 0.8f
+        val cellW = if (tall) min(w * 0.36f, (h - pad * 2) * 0.5f) else min(w * 0.22f, h - pad * 2) * 0.62f
+        val cellH = if (tall) h - pad * 2 else h - pad * 2
+        val cell = RectF(w - pad - cellW, pad, w - pad, pad + cellH)
+        val rad = cellW * 0.26f
+        c.drawRoundRect(cell, rad, rad, paint(pal.face))
+        val fillTop = cell.bottom - cell.height() * b.level / 100f
+        c.save()
+        val clip = Path().apply { addRoundRect(cell, rad, rad, Path.Direction.CW) }
+        c.clipPath(clip)
+        c.drawRect(cell.left, fillTop, cell.right, cell.bottom, Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = LinearGradient(0f, fillTop, 0f, cell.bottom, tint(col, 0.15f), col, Shader.TileMode.CLAMP)
+        })
+        // onda sul bordo del liquido
+        val wave = Path().apply {
+            moveTo(cell.left, fillTop)
+            quadTo(cell.left + cell.width() * 0.25f, fillTop - 3f, cell.centerX(), fillTop)
+            quadTo(cell.left + cell.width() * 0.75f, fillTop + 3f, cell.right, fillTop)
+            lineTo(cell.right, fillTop + 4f); lineTo(cell.left, fillTop + 4f); close()
+        }
+        c.drawPath(wave, paint(tint(col, 0.3f)))
+        c.restore()
+        if (b.charging) bolt(cell.centerX(), cell.centerY(), cellW * 0.22f, 0xFFFFFFFF.toInt())
+        val tx = pad
+        val maxW = cell.left - pad * 1.5f
+        val ts = min(h * 0.32f, maxW * 0.42f)
+        text("${b.level}", tx, h * 0.42f, ts, pal.text, tfNum, "left", maxW)
+        val tw = Renderer.textPaint(ts * k, 0, tfNum, null).measureText("${b.level}")
+        text("%", tx + min(tw, maxW) + 2f, h * 0.42f + ts * 0.18f, ts * 0.38f, pal.dim, tfR, "left")
+        if (on("status")) text(Renderer.batteryStatus(b), tx, h * 0.42f + lineH(ts) * 0.55f, (ts * 0.24f).coerceIn(10f, 15f), pal.dim, tfR, "left", maxW)
+        val acc = accessories()
+        if (acc.isNotEmpty() && h >= 120f) {
+            val fs = 11f
+            var y = h - pad - lineH(fs) * 0.5f
+            acc.take(2).reversed().forEach { a ->
+                text("${a.name} ${a.level}%", tx, y, fs, pal.dim, tfR, "left", maxW)
+                y -= lineH(fs)
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ Nothing
+
+    val tfDot: Typeface get() = Renderer.typeface("dot")
+
+    /** Fila di puntini: quelli accesi fino alla percentuale. */
+    fun dots(r: RectF, frac: Float, on: Int, off: Int) {
+        val d0 = r.height()
+        val n = (r.width() / (d0 * 1.6f)).toInt().coerceIn(5, 30)
+        val step = r.width() / n
+        val lit = (frac * n + 0.0001f).toInt().coerceIn(0, n)
+        for (i in 0 until n) c.drawCircle(r.left + step * (i + 0.5f), r.centerY(), d0 / 2, paint(if (i < lit) on else off))
+    }
+
+    fun weatherNothing() {
+        background()
+        val x = wx ?: return noWeather(pal.text)
+        val pad = (m * 0.1f).coerceIn(10f, 18f)
+        val wide = w >= 250f
+        val leftW = if (wide && on("hours")) w * 0.45f else w - pad * 2
+        val fs = (m * 0.08f).coerceIn(9f, 14f)
+        if (on("place")) text(x.place.ifBlank { "POSIZIONE" }.uppercase(loc), pad, pad + lineH(fs) * 0.5f, fs, pal.dim, tfDot, "left", leftW - m * 0.3f, shadow = false)
+        val ic = min(m * 0.3f, 56f)
+        icon(pad + leftW - ic / 2, pad + ic / 2, ic, x.code, x.isDay)
+        val ts = min(h * 0.38f, leftW * 0.5f)
+        val ty = h - pad - (if (on("cond") || on("hilo")) lineH(fs) * 1.2f else 0f) - lineH(ts) * 0.42f
+        text("${x.temp}°", pad - 2f, ty, ts, pal.text, tfDot, "left", leftW, shadow = false)
+        val line = listOfNotNull(
+            if (on("cond")) weatherText(x.code).uppercase(loc) else null,
+            if (on("hilo")) "${x.hi}°/${x.lo}°" else null
+        ).joinToString("  ")
+        text(line, pad, h - pad - lineH(fs) * 0.5f, fs, pal.text, tfDot, "left", leftW, shadow = false)
+        if (wide && on("hours")) {
+            c.drawLine(pad + leftW + pad * 0.5f, pad, pad + leftW + pad * 0.5f, h - pad, paint(pal.track).apply { strokeWidth = 1f })
+            hoursRow(x, RectF(pad + leftW + pad, pad, w - pad, h - pad), pal.text, pal.dim)
+        }
+        c.drawCircle(w - m * 0.1f, m * 0.1f, m * 0.03f, paint(pal.accent))
+    }
+
+    fun batteryNothing() {
+        background()
+        val b = d.battery
+        val pad = (m * 0.11f).coerceIn(10f, 18f)
+        val col = if (Renderer.low(b)) pal.accent else pal.text
+        val fs = (m * 0.08f).coerceIn(9f, 14f)
+        text(if (b.charging) "IN CARICA" else "BATTERIA", pad, pad + lineH(fs) * 0.5f, fs, if (b.charging) pal.accent else pal.dim, tfDot, "left", w - pad * 2, shadow = false)
+        val ts = min(h * 0.42f, w * 0.38f)
+        text("${b.level}%", pad - 2f, h * 0.52f, ts, pal.text, tfDot, "left", w - pad * 2, shadow = false)
+        val dh = (m * 0.05f).coerceIn(4f, 9f)
+        dots(RectF(pad, h - pad - dh, w - pad, h - pad), b.level / 100f, col, pal.track)
+        if (on("status") && w >= 220f) text(Renderer.batteryStatus(b).uppercase(loc), w - pad, pad + lineH(fs) * 0.5f, fs, pal.dim, tfDot, "right", w * 0.45f, shadow = false)
+    }
+
+    fun earbuds() {
+        background()
+        val pad = (m * 0.11f).coerceIn(10f, 18f)
+        val fs = (m * 0.08f).coerceIn(9f, 14f)
+        text("ACCESSORI", pad, pad + lineH(fs) * 0.5f, fs, pal.dim, tfDot, "left", w - pad * 2, shadow = false)
+        c.drawCircle(w - m * 0.1f, m * 0.1f, m * 0.03f, paint(pal.accent))
+        val list = d.battery.accessories
+        val area = RectF(pad, pad + lineH(fs) * 1.3f, w - pad, h - pad)
+        if (!hasBtPermission(ctx)) {
+            text("CONSENTI IL BLUETOOTH", area.centerX(), area.centerY(), fs, pal.text, tfDot, "center", area.width(), shadow = false)
+            return
+        }
+        if (list.isEmpty()) {
+            text("NESSUN ACCESSORIO", area.centerX(), area.centerY(), fs * 1.1f, pal.text, tfDot, "center", area.width(), shadow = false)
+            return
+        }
+        val n = min(list.size, if (w >= h * 1.6f) 4 else 2)
+        val cw = area.width() / n
+        list.take(n).forEachIndexed { i, a ->
+            val cx = area.left + cw * (i + 0.5f)
+            val rr = min(cw * 0.4f, (area.height() - lineH(fs) * 1.3f) * 0.45f)
+            val cy = area.top + rr + 2f
+            // anello a puntini
+            val dotsN = 24
+            val lit = (a.level / 100f * dotsN).toInt()
+            for (j in 0 until dotsN) {
+                val ang = Math.toRadians(j * 360.0 / dotsN - 90)
+                c.drawCircle(cx + rr * cos(ang).toFloat(), cy + rr * sin(ang).toFloat(), rr * 0.07f,
+                    paint(if (j < lit) (if (a.level <= 15) pal.accent else pal.text) else pal.track))
+            }
+            deviceGlyph(a.kind, cx, cy - rr * 0.18f, rr * 0.55f, pal.text)
+            text("${a.level}%", cx, cy + rr * 0.42f, rr * 0.32f, pal.text, tfDot, "center", rr * 1.4f, shadow = false)
+            text(a.name.uppercase(loc), cx, cy + rr + lineH(fs) * 0.7f, fs * 0.9f, pal.dim, tfDot, "center", cw - 4f, shadow = false)
+        }
+    }
+
+    fun steps() {
+        background()
+        val pad = (m * 0.11f).coerceIn(10f, 18f)
+        val fs = (m * 0.08f).coerceIn(9f, 14f)
+        text("PASSI DI OGGI", pad, pad + lineH(fs) * 0.5f, fs, pal.dim, tfDot, "left", w - pad * 2, shadow = false)
+        c.drawCircle(w - m * 0.1f, m * 0.1f, m * 0.03f, paint(pal.accent))
+        if (!d.stepsAllowed) {
+            text("CONSENTI L'ATTIVITÀ FISICA", w / 2, h / 2, fs, pal.text, tfDot, "center", w - pad * 2, shadow = false)
+            return
+        }
+        val goal = StepsRepo.GOAL
+        val ts = min(h * 0.36f, w * 0.3f)
+        val str = "%,d".format(loc, d.steps)
+        text(str, pad - 2f, h * 0.5f, ts, pal.text, tfDot, "left", w - pad * 2, shadow = false)
+        if (on("goal")) {
+            val dh = (m * 0.05f).coerceIn(4f, 9f)
+            val frac = d.steps.toFloat() / goal
+            dots(RectF(pad, h - pad - dh, w - pad, h - pad), frac, if (frac >= 1f) pal.accent else pal.text, pal.track)
+            text("${(frac * 100).toInt().coerceAtMost(999)}% DI ${"%,d".format(loc, goal)}", pad, h - pad - dh - lineH(fs) * 0.8f, fs * 0.9f, pal.dim, tfDot, "left", w - pad * 2, shadow = false)
+        }
+    }
+
+    fun quote() {
+        background()
+        val (q, kind) = Quotes.today(d.now)
+        val pad = (m * 0.11f).coerceIn(10f, 20f)
+        val fs = (m * 0.08f).coerceIn(9f, 14f)
+        text(if (kind == "Proverbio") "PROVERBIO DEL GIORNO" else "CURIOSITÀ DEL GIORNO", pad, pad + lineH(fs) * 0.5f, fs, pal.dim, tfDot, "left", w - pad * 2, shadow = false)
+        c.drawCircle(w - m * 0.1f, m * 0.1f, m * 0.03f, paint(pal.accent))
+        val top = pad + lineH(fs) * 1.4f
+        val maxW = (w - pad * 2).toInt().coerceAtLeast(10)
+        val maxH = h - top - pad
+        var size = (m * 0.16f).coerceAtMost(26f) * k
+        val tf = Renderer.typeface(s.font)
+        var layout: StaticLayout
+        while (true) {
+            val p = Renderer.textPaint(size, pal.text, tf, null)
+            layout = StaticLayout.Builder.obtain(q, 0, q.length, p, maxW).setLineSpacing(0f, 1.1f).build()
+            if (layout.height <= maxH || size <= 9f) break
+            size *= 0.92f
+        }
+        c.save()
+        c.translate(pad, top + (maxH - layout.height).coerceAtLeast(0) / 2f)
+        layout.draw(c)
+        c.restore()
+    }
 }
 
 /** Funzioni di colore senza dipendere da Compose. */
@@ -1450,6 +1807,32 @@ object Analog {
                     val (x1, y1) = polar(cx, cy, r * 0.96f, i * 90f)
                     val (x2, y2) = polar(cx, cy, r * 0.82f, i * 90f)
                     c.drawLine(x1, y1, x2, y2, tick)
+                }
+                return
+            }
+            "nothing" -> {
+                c.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.face })
+                tick.color = pal.text
+                for (i in 0 until 12) {
+                    val (x, y) = polar(cx, cy, r * 0.84f, i * 30f)
+                    c.drawCircle(x, y, r * (if (i % 3 == 0) 0.045f else 0.022f), tick)
+                }
+                return
+            }
+            "hyper" -> {
+                c.drawCircle(cx, cy, r, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = pal.face })
+                tick.color = pal.text; tick.strokeCap = Paint.Cap.ROUND
+                for (i in 0 until 12) {
+                    val big = i % 3 == 0
+                    if (big) {
+                        tick.strokeWidth = r * 0.06f
+                        val (x1, y1) = polar(cx, cy, r * 0.86f, i * 30f)
+                        val (x2, y2) = polar(cx, cy, r * 0.7f, i * 30f)
+                        c.drawLine(x1, y1, x2, y2, tick)
+                    } else {
+                        val (x, y) = polar(cx, cy, r * 0.82f, i * 30f)
+                        c.drawCircle(x, y, r * 0.025f, tick)
+                    }
                 }
                 return
             }
@@ -1517,8 +1900,10 @@ object Analog {
         kind == "second" -> when (s.dial) {
             "sense" -> 0xFFF2F3F5.toInt()
             "ios" -> 0xFFFF9500.toInt()
+            "nothing", "hyper" -> pal.accent
             else -> Renderer.RED
         }
+        s.dial == "nothing" || s.dial == "hyper" -> pal.text
         s.dial == "ios" -> if (pal.dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
         s.dial == "bare" || s.dial == "none" -> if (kind == "minute") pal.accent else pal.text
         kind == "minute" -> pal.accent
@@ -1545,6 +1930,11 @@ object Analog {
                 "thin" -> {
                     p.strokeWidth = r * (if (hour) 0.05f else 0.035f)
                     c.drawLine(cx, cy + r * 0.1f, cx, cy - r * (if (hour) 0.5f else 0.78f), p)
+                }
+                "nothing" -> {
+                    // lancette larghe e arrotondate, con il bordo staccato dal centro
+                    p.strokeWidth = r * (if (hour) 0.11f else 0.075f)
+                    c.drawLine(cx, cy - r * 0.16f, cx, cy - r * (if (hour) 0.5f else 0.76f), p)
                 }
                 "ios" -> {
                     // stelo sottile vicino al centro, poi lancetta piena
@@ -1590,6 +1980,7 @@ object Analog {
                         shader = RadialGradient(cx - r * 0.015f, cy - r * 0.015f, r * 0.05f, 0xFFFFFFFF.toInt(), 0xFF9A9EA4.toInt(), Shader.TileMode.CLAMP)
                     })
                 }
+                "nothing" -> c.drawCircle(cx, cy, r * 0.05f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (s.seconds) pal.accent else pal.text })
                 "ios" -> {
                     c.drawCircle(cx, cy, r * 0.05f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (s.seconds) 0xFFFF9500.toInt() else col })
                     c.drawCircle(cx, cy, r * 0.02f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (pal.dark) 0xFF000000.toInt() else 0xFFFFFFFF.toInt() })

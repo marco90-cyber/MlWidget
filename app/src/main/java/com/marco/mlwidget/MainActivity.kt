@@ -22,6 +22,7 @@ class MlWidgetApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLog.init(this)
+        Renderer.loadFonts(this)
         Refresh.schedule(this)
         BatteryWatcher.start(this)
     }
@@ -80,7 +81,7 @@ class MainActivity : ComponentActivity() {
         val open = i?.getStringExtra("open") ?: return
         i.removeExtra("open")
         when {
-            open == "weather" || open == "calendar" -> go("settings")
+            open == "weather" || open == "calendar" || open == "settings" -> go("settings")
             open == "music" -> MusicRepo.openAccessSettings(this)
             open.startsWith("note:") || open.startsWith("edit:") -> go("edit:" + open.substringAfter(':'))
         }
