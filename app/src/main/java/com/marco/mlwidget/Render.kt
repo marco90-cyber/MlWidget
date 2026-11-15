@@ -1769,7 +1769,7 @@ private class Painter(
             size *= 0.92f
         }
         c.save()
-        c.translate(pad, top + (maxH - layout.height).coerceAtLeast(0) / 2f)
+        c.translate(pad, top + (maxH - layout.height).coerceAtLeast(0f) / 2f)
         layout.draw(c)
         c.restore()
     }
