@@ -1,12 +1,12 @@
 # MlWidget
 
-Tutti i widget delle **MLapps** in un'app sola, divisi per categorie e personalizzabili al massimo.
+Widget per la Home divisi per stile (Material You, iOS, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano al massimo.
 
 ## Cosa si può fare
-- Aprire l'app e vedere tutti i widget: **Orologi, Meteo, Sistema, Note e strumenti**
+- Aprire l'app e vedere tutti i widget divisi per stile
 - Toccare un widget per modificarlo:
-  - **spostare gli elementi col dito** nell'anteprima (si agganciano al centro)
-  - grandezza, larghezza, allineamento, colore e visibilità di ogni elemento
+  - scegliere quali parti mostrare (data, località, ore, giorni, appuntamenti, copertina...)
+  - grandezza del testo
   - **quadrante e stile delle lancette** degli orologi analogici, lancetta dei secondi
   - carattere dei numeri
   - colori dal **sistema (Material You)**, dallo **sfondo del telefono** o **personali**
@@ -15,19 +15,20 @@ Tutti i widget delle **MLapps** in un'app sola, divisi per categorie e personali
 - **Aggiungi alla Home** direttamente dall'editor, oppure dalla Home: *Widget → MlWidget* e si sceglie quale mostrare
 - Le modifiche si vedono subito sui widget già messi sulla Home
 
-## Da dove arrivano i widget
-| Widget | App |
+## I widget
+| Stile | Widget |
 |---|---|
-| Orologio, Orologio verticale, Solo testo, Analogico, Analogico con data | MLauncher |
-| Orologio Sensation, Orologio a cartellini | MLauncher (tema Sensation) |
-| Meteo, Meteo quadrato | MLauncher |
-| Meteo mini, Meteo completo, Meteo con dettagli, Pioggia in arrivo | MLMeteo |
-| Batteria, Batteria larga, Batteria a barra | MLauncher |
-| Nota veloce, Barra di ricerca | MLauncher |
+| Material You | Orologio, Orologio analogico, In breve, Meteo, Batteria, Calendario, Musica, Dispositivo, Nota, Ricerca |
+| iOS | Orologio, Meteo, Batterie, Calendario, Musica, Note |
+| Sense | Orologio Sensation, Cartellini con meteo, Cartellini |
+| Retrò | Orologio a cartellini, Sveglia LCD, iPod, Calendario a strappo |
+| Minimal | Ora, Lancette, Meteo in una riga, Batteria a linea, Musica in una riga |
+
+Ogni widget **si adatta da solo** alla grandezza (2×1, 2×2, 4×1, 4×2, 4×3...): nell'editor si sceglie quali parti mostrare e si prova l'anteprima in tutte le grandezze.
 
 ## Come funziona
 - Ore e lancette sui widget sono **orologi di sistema**: si muovono da soli senza consumare batteria.
-- Il resto è un'immagine ridisegnata ogni 15 minuti (meteo, batteria), a mezzanotte (data) e a ogni modifica.
+- Batteria: si ridisegna quando cambia (e comunque ogni 10 minuti). Meteo: ogni 15/30/60 minuti, o toccando il widget. Calendario: quando cambia un appuntamento. Musica: a ogni cambio di brano (serve l'accesso alle notifiche).
 - Chiaro e scuro: Android sceglie da solo la versione giusta del widget quando cambia la modalità scura.
 - Meteo da Open-Meteo; la posizione si aggiorna quando l'app è aperta (niente posizione in background).
 - Android 12 o successivo. Tema grafico: [MLTheme](https://github.com/marco90-cyber/MLTheme).

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,7 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** Tutti i widget, divisi per categoria. */
+/** Tutti i widget, divisi per stile. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
@@ -52,7 +53,7 @@ fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
     val scroll = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var filter by rememberSaveable { mutableStateOf("all") }
     val dark = Palettes.isNight(ctx)
-    val onHome = remember { WidgetUpdater.allIds(ctx).mapNotNull { Store.boundTemplate(ctx, it)?.id }.groupingBy { it }.eachCount() }
+    val onHome = remember { WidgetUpdater.onHome(ctx).groupingBy { it.id }.eachCount() }
     val needPlace = remember { WeatherRepo.currentPlace(ctx) == null }
 
     Scaffold(
@@ -61,24 +62,15 @@ fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
         topBar = {
             LargeTopAppBar(
                 title = { Text("MlWidget") },
-                actions = {
-                    IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Impostazioni") }
-                },
+                actions = { IconButton(onClick = onSettings) { Icon(Icons.Outlined.Settings, "Impostazioni") } },
                 scrollBehavior = scroll,
                 colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = cs.surface, scrolledContainerColor = cs.surfaceContainer)
             )
         }
     ) { pad ->
-        LazyColumn(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                top = pad.calculateTopPadding(), bottom = pad.calculateBottomPadding() + 24.dp
-            )
-        ) {
+        LazyColumn(contentPadding = PaddingValues(top = pad.calculateTopPadding(), bottom = pad.calculateBottomPadding() + 24.dp)) {
             item {
-                LazyRow(
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     item { FilterChip(filter == "all", { filter = "all" }, { Text("Tutti") }) }
                     items(CATEGORIES) { (k, n) -> FilterChip(filter == k, { filter = k }, { Text(n) }) }
                 }
@@ -98,10 +90,8 @@ fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
             CATEGORIES.filter { filter == "all" || filter == it.first }.forEach { (key, name) ->
                 val list = Templates.all.filter { it.category == key }
                 item(key = "h_$key") {
-                    Text(
-                        name, style = MaterialTheme.typography.titleMedium, color = cs.primary,
-                        modifier = Modifier.padding(start = 24.dp, top = 22.dp, bottom = 10.dp)
-                    )
+                    Text(name, style = MaterialTheme.typography.titleMedium, color = cs.primary,
+                        modifier = Modifier.padding(start = 24.dp, top = 22.dp, bottom = 10.dp))
                 }
                 // due colonne; i widget larghi occupano tutta la riga
                 val rows = ArrayList<List<Template>>()
@@ -115,9 +105,7 @@ fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
                 rows.forEachIndexed { i, row ->
                     item(key = "r_${key}_$i") {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            row.forEach { t ->
-                                TemplateCard(t, dark, onHome[t.id] ?: 0, Modifier.weight(if (t.cols >= 4) 2f else 1f)) { onOpen(t) }
-                            }
+                            row.forEach { t -> TemplateCard(t, dark, onHome[t.id] ?: 0, Modifier.weight(if (t.cols >= 4) 2f else 1f)) { onOpen(t) } }
                             if (row.size == 1 && row[0].cols < 4) Spacer(Modifier.weight(1f))
                         }
                     }
@@ -128,32 +116,32 @@ fun HomeScreen(onOpen: (Template) -> Unit, onSettings: () -> Unit) {
 }
 
 @Composable
-private fun TemplateCard(t: Template, dark: Boolean, onHome: Int, modifier: Modifier, onClick: () -> Unit) {
+fun TemplateCard(t: Template, dark: Boolean, onHome: Int, modifier: Modifier, selected: Boolean = false, onClick: () -> Unit) {
     val ctx = LocalContext.current
     val cs = MaterialTheme.colorScheme
     val cfg = remember(t.id) { Store.load(ctx, t) }
     Surface(
-        color = cs.surfaceContainer,
+        color = if (selected) cs.secondaryContainer else cs.surfaceContainer,
         shape = RoundedCornerShape(26.dp),
         modifier = modifier.clip(RoundedCornerShape(26.dp)).clickable(onClick = onClick)
     ) {
         Column(Modifier.padding(10.dp)) {
-            BoxWithConstraints(Modifier.fillMaxWidth().height(if (t.rows >= 3) 200.dp else if (t.rows == 1) 84.dp else 140.dp)
-                .clip(RoundedCornerShape(18.dp)).background(wallpaperBrush(dark)),
+            BoxWithConstraints(
+                Modifier.fillMaxWidth().height(if (t.rows >= 3) 200.dp else if (t.rows == 1) 84.dp else 140.dp)
+                    .clip(RoundedCornerShape(18.dp)).background(wallpaperBrush(dark)),
                 contentAlignment = Alignment.Center
             ) {
                 val (w, h) = WidgetUpdater.defaultDp(t.cols, t.rows)
                 val k = minOf((maxWidth.value - 20f) / w, (maxHeight.value - 20f) / h)
                 WidgetPreview(t, cfg, dark, w, h, k)
             }
-            Text(
-                t.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp, top = 10.dp)
-            )
+            Text(t.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp, top = 10.dp))
             Text(
                 buildString {
-                    append("da ${t.from} · ${t.cols}×${t.rows}")
+                    append(CATEGORIES.firstOrNull { it.first == t.look }?.second ?: "")
                     if (onHome > 0) append(" · sulla Home: $onHome")
+                    if (selected) append(" · in uso")
                 },
                 style = MaterialTheme.typography.bodySmall, color = cs.onSurfaceVariant, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Generato: immagine del widget + orologio analogico + 4 posti per gli orologi digitali
-     (5 caratteri, con e senza ombra). Gli orologi di sistema si aggiornano da soli. -->
+     (6 caratteri, con e senza ombra) + 3 zone da toccare (tasti della musica). -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
@@ -64,6 +64,17 @@
         android:layout_height="0dp"
         android:layout_gravity="top|start"
         android:fontFamily="sans-serif-condensed"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s0_mono"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
         android:textStyle="bold"
         android:gravity="center"
         android:includeFontPadding="false"
@@ -142,6 +153,21 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s0_mono_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s1_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -188,6 +214,17 @@
         android:layout_height="0dp"
         android:layout_gravity="top|start"
         android:fontFamily="sans-serif-condensed"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s1_mono"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
         android:textStyle="bold"
         android:gravity="center"
         android:includeFontPadding="false"
@@ -266,6 +303,21 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s1_mono_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s2_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -312,6 +364,17 @@
         android:layout_height="0dp"
         android:layout_gravity="top|start"
         android:fontFamily="sans-serif-condensed"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s2_mono"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
         android:textStyle="bold"
         android:gravity="center"
         android:includeFontPadding="false"
@@ -390,6 +453,21 @@
         android:maxLines="1"
         android:visibility="gone" />
     <TextClock
+        android:id="@+id/s2_mono_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
         android:id="@+id/s3_light"
         android:layout_width="0dp"
         android:layout_height="0dp"
@@ -436,6 +514,17 @@
         android:layout_height="0dp"
         android:layout_gravity="top|start"
         android:fontFamily="sans-serif-condensed"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s3_mono"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
         android:textStyle="bold"
         android:gravity="center"
         android:includeFontPadding="false"
@@ -512,5 +601,41 @@
         android:gravity="center"
         android:includeFontPadding="false"
         android:maxLines="1"
+        android:visibility="gone" />
+    <TextClock
+        android:id="@+id/s3_mono_sh"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:fontFamily="monospace"
+        android:textStyle="bold"
+        android:shadowColor="#99000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="4"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:visibility="gone" />
+    <ImageView
+        android:id="@+id/z0"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+    <ImageView
+        android:id="@+id/z1"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+    <ImageView
+        android:id="@+id/z2"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_gravity="top|start"
+        android:importantForAccessibility="no"
         android:visibility="gone" />
 </FrameLayout>

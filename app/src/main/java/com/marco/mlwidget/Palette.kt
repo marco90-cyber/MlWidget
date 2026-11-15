@@ -21,7 +21,9 @@ class Pal(
     val border: Int?,
     /** testo senza sfondo: serve un'ombra per leggerlo */
     val shadow: Boolean,
-    val dark: Boolean
+    val dark: Boolean,
+    /** lo sfondo scelto davvero (tonal, ios, retro, none...) */
+    val bgKind: String = "tonal"
 )
 
 /** Una famiglia di colori: tonalità da 0 (nero) a 100 (bianco) per accento 1/2/3 e neutri. */
@@ -146,7 +148,27 @@ object Palettes {
         else -> nightNow
     }
 
-    fun palette(ctx: Context, s: Style, dark: Boolean): Pal {
+    /** Colore vivo dello stile (per iOS e Retrò, dove i colori sono pieni). */
+    fun vivid(ctx: Context, s: Style, dark: Boolean): Int = when (s.colorSource) {
+        "custom" -> s.customColor
+        else -> tones(ctx, s).a1(if (dark) 70 else 50)
+    }
+
+    /** Lo sfondo "dello stile" per ogni tipo di widget. */
+    fun lookBackground(t: Template?): String = when (t?.look) {
+        null -> "tonal"
+        "material" -> when (t.kind) {
+            "glance" -> "none"
+            "weather", "analog", "calendar" -> "tonal3"
+            "battery", "device", "music" -> "tonal2"
+            else -> "tonal"
+        }
+        "ios" -> "ios"
+        "retro" -> "retro"
+        else -> "none"
+    }
+
+    fun palette(ctx: Context, s: Style, dark: Boolean, tpl: Template? = null): Pal {
         val t = tones(ctx, s)
         fun a(alpha: Int, c: Int) = ColorUtils.setAlphaComponent(c, alpha)
         val op = (s.opacity.coerceIn(0, 100) * 255 / 100)
@@ -154,12 +176,25 @@ object Palettes {
         var shadow = false
         val bg: Int
         val text: Int
-        val accent: Int
-        when (s.background) {
+        var accent: Int
+        var dimC: Int? = null
+        val kind = if (s.background == "look") lookBackground(tpl) else s.background
+        when (kind) {
             "tonal2" -> { bg = if (dark) t.a2(30) else t.a2(90); text = if (dark) t.a2(90) else t.a2(10); accent = if (dark) t.a1(80) else t.a1(40) }
             "tonal3" -> { bg = if (dark) t.a3(30) else t.a3(90); text = if (dark) t.a3(90) else t.a3(10); accent = if (dark) t.a1(80) else t.a1(40) }
             "neutral" -> { bg = if (dark) t.n1(17) else t.n1(94); text = if (dark) t.n1(90) else t.n1(10); accent = if (dark) t.a1(80) else t.a1(40) }
             "filled" -> { bg = if (dark) t.a1(80) else t.a1(40); text = if (dark) t.a1(20) else t.a1(100); accent = if (dark) t.a1(30) else t.a1(90) }
+            "ios" -> {
+                bg = if (dark) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
+                text = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
+                dimC = 0xFF8E8E93.toInt()
+                accent = vivid(ctx, s, dark)
+            }
+            "retro" -> {
+                bg = if (dark) 0xFF1B1B1D.toInt() else 0xFFECE6D8.toInt()
+                text = if (dark) 0xFFEDEDED.toInt() else 0xFF2A2622.toInt()
+                accent = vivid(ctx, s, dark)
+            }
             "glass" -> {
                 bg = if (dark) a(66, 0xFF000000.toInt()) else a(97, 0xFFFFFFFF.toInt())
                 text = if (dark) 0xFFFFFFFF.toInt() else 0xFF15171C.toInt()
@@ -174,20 +209,24 @@ object Palettes {
             }
             else -> { bg = if (dark) t.a1(30) else t.a1(90); text = if (dark) t.a1(90) else t.a1(10); accent = if (dark) t.a1(80) else t.a1(40) }
         }
-        val finalBg = if (s.background == "glass" || s.background == "none") bg
-            else ColorUtils.setAlphaComponent(bg, op)
+        if (s.colorSource == "custom" && kind !in setOf("ios", "retro", "filled")) {
+            // colore personale: l'accento resta riconoscibile ma leggibile sul fondo
+            accent = if (dark) t.a1(80) else t.a1(40)
+        }
+        val finalBg = if (kind == "glass" || kind == "none") bg else ColorUtils.setAlphaComponent(bg, op)
         return Pal(
             bg = finalBg,
             text = text,
-            dim = ColorUtils.setAlphaComponent(text, 200),
+            dim = dimC ?: ColorUtils.setAlphaComponent(text, 190),
             accent = accent,
-            face = if (dark) t.n1(12) else t.n1(99),
+            face = if (kind == "ios") (if (dark) 0xFF2C2C2E.toInt() else 0xFFF2F2F7.toInt()) else if (dark) t.n1(12) else t.n1(99),
             faceInk = if (dark) t.n1(90) else t.n1(10),
             tick = if (dark) t.n2(70) else t.n2(40),
             track = ColorUtils.setAlphaComponent(text, 40),
             border = border,
             shadow = shadow || s.opacity < 50,
-            dark = dark
+            dark = dark,
+            bgKind = kind
         )
     }
 }

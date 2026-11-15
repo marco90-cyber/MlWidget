@@ -23,6 +23,7 @@ class MlWidgetApp : Application() {
         super.onCreate()
         AppLog.init(this)
         Refresh.schedule(this)
+        BatteryWatcher.start(this)
     }
 }
 
@@ -31,10 +32,25 @@ class MainActivity : ComponentActivity() {
     private var screen by mutableStateOf("home")
     private val stack = ArrayList<String>()
 
+    private val askLocation = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) Thread {
+            WeatherRepo.setGps(this)
+            WeatherRepo.updateGps(this)
+            WeatherRepo.fetch(this)
+            WidgetUpdater.updateAll(this)
+        }.start()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         handle(intent)
+        // al primo avvio si chiede la posizione per il meteo (si può anche scegliere una città)
+        val first = getSharedPreferences("app", MODE_PRIVATE)
+        if (!first.getBoolean("askedLocation", false) && !WeatherRepo.hasLocationPermission(this) && WeatherRepo.city(this) == null) {
+            first.edit().putBoolean("askedLocation", true).apply()
+            askLocation.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
         setContent {
             MLTheme {
                 AppUpdateHost()
@@ -52,8 +68,10 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // con l'app aperta si legge la posizione: i widget meteo la usano anche dopo, senza GPS in background
         Thread {
+            val before = WeatherRepo.savedGps(this)
             if (WeatherRepo.mode(this) == "gps") WeatherRepo.updateGps(this)
-            if (WeatherRepo.isOld(this)) WeatherRepo.fetch(this)
+            val moved = WeatherRepo.mode(this) == "gps" && before?.name != WeatherRepo.savedGps(this)?.name
+            if (WeatherRepo.isOld(this) || moved) WeatherRepo.fetch(this)
             WidgetUpdater.updateAll(this)
         }.start()
     }
@@ -62,7 +80,8 @@ class MainActivity : ComponentActivity() {
         val open = i?.getStringExtra("open") ?: return
         i.removeExtra("open")
         when {
-            open == "weather" -> go("settings")
+            open == "weather" || open == "calendar" -> go("settings")
+            open == "music" -> MusicRepo.openAccessSettings(this)
             open.startsWith("note:") || open.startsWith("edit:") -> go("edit:" + open.substringAfter(':'))
         }
     }

@@ -2,10 +2,7 @@ package com.marco.mlwidget
 
 import android.app.WallpaperManager
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -13,7 +10,6 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -44,16 +40,13 @@ fun wallpaperBrush(dark: Boolean): Brush {
         val wc = try { WallpaperManager.getInstance(ctx).getWallpaperColors(WallpaperManager.FLAG_SYSTEM) } catch (e: Throwable) { null }
         val list = listOfNotNull(wc?.primaryColor, wc?.secondaryColor, wc?.tertiaryColor).map { Color(it.toArgb()) }
             .ifEmpty { listOf(Color(0xFF5B6EE1), Color(0xFF9C5BD6), Color(0xFF3FA7A0)) }
-        val shade = if (dark) Color.Black.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.15f)
-        list.map { androidx.compose.ui.graphics.lerp(it, shade.copy(alpha = 1f), shade.alpha) }
+        val shade = if (dark) Color.Black else Color.White
+        list.map { androidx.compose.ui.graphics.lerp(it, shade, if (dark) 0.45f else 0.15f) }
     }
     return if (cols.size == 1) Brush.linearGradient(listOf(cols[0], cols[0])) else Brush.linearGradient(cols)
 }
 
-/**
- * Anteprima di un widget, disegnata con lo stesso codice del widget vero.
- * [scale] riduce o ingrandisce il widget sullo schermo; [selected] mostra il riquadro dell'elemento scelto.
- */
+/** Anteprima di un widget, disegnata con lo stesso codice del widget vero. */
 @Composable
 fun WidgetPreview(
     t: Template,
@@ -63,60 +56,22 @@ fun WidgetPreview(
     hDp: Float,
     scale: Float,
     modifier: Modifier = Modifier,
-    version: Int = 0,
-    selected: String? = null,
-    guides: Pair<Boolean, Boolean> = false to false,
-    sample: Boolean = true
+    version: Int = 0
 ) {
     val ctx = LocalContext.current
     val density = LocalDensity.current.density
-    val now = rememberNow(cfg.style.seconds || cfg.els.any { it.kind == "seconds" && it.visible })
-    val accent = remember(version, dark) { Palettes.palette(ctx, cfg.style, dark).accent }
+    val secs = cfg.style.seconds && t.kind in setOf("digital", "analog", "flip", "lcd")
+    val now = rememberNow(secs)
+    val data = remember(t.id, version, now / 60_000L) { WData.load(ctx, sample = true, t = t) }
     Canvas(modifier.size((wDp * scale).dp, (hDp * scale).dp)) {
         if (version < 0) return@Canvas
-        val base = WData.load(ctx, sample)
-        val data = WData(base.weather, base.battery, now, base.is24)
-        val pal = Palettes.palette(ctx, cfg.style, dark)
+        val pal = Palettes.palette(ctx, cfg.style, dark, t)
         drawIntoCanvas { c ->
             val nc = c.nativeCanvas
             nc.save()
             nc.scale(density * scale, density * scale)
-            val d = Renderer.draw(ctx, nc, t, cfg, wDp, hDp, pal, data, drawLive = true)
-            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                style = android.graphics.Paint.Style.STROKE
-                strokeWidth = 1.5f / scale
-                color = accent
-                pathEffect = android.graphics.DashPathEffect(floatArrayOf(5f / scale, 4f / scale), 0f)
-            }
-            if (guides.first) nc.drawLine(wDp / 2, 0f, wDp / 2, hDp, p)
-            if (guides.second) nc.drawLine(0f, hDp / 2, wDp, hDp / 2, p)
-            selected?.let { id ->
-                d.boxes[id]?.let { r ->
-                    val pad = 3f
-                    p.pathEffect = null
-                    p.color = if (dark) 0xFFFFFFFF.toInt() else 0xFF000000.toInt()
-                    p.alpha = 150
-                    nc.drawRoundRect(r.left - pad, r.top - pad, r.right + pad, r.bottom + pad, 6f, 6f, p)
-                }
-            }
+            Renderer.draw(ctx, nc, t, cfg, wDp, hDp, pal, data.at(now), drawLive = true)
             nc.restore()
         }
-    }
-}
-
-/** Anteprima su uno "sfondo" che somiglia a quello del telefono. */
-@Composable
-fun PreviewOnWallpaper(
-    t: Template, cfg: Cfg, dark: Boolean, wDp: Float, hDp: Float, scale: Float,
-    modifier: Modifier = Modifier, version: Int = 0, padding: Float = 12f
-) {
-    Box(
-        modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(wallpaperBrush(dark))
-            .size(((wDp * scale) + padding * 2).dp, ((hDp * scale) + padding * 2).dp),
-        contentAlignment = androidx.compose.ui.Alignment.Center
-    ) {
-        WidgetPreview(t, cfg, dark, wDp, hDp, scale, version = version)
     }
 }

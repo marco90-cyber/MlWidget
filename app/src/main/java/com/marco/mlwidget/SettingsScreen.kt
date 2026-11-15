@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Bluetooth
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.DeleteSweep
+import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ListAlt
 import androidx.compose.material.icons.outlined.LocationOn
@@ -78,6 +81,15 @@ fun SettingsScreen(onBack: () -> Unit, onLog: () -> Unit) {
     val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) { WeatherRepo.setGps(ctx); refresh() }
     }
+    val other = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        tick++
+        WidgetUpdater.updateAllAsync(ctx)
+    }
+    // tornando dalle impostazioni di Android (accesso alle notifiche) si rilegge lo stato
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        tick++
+        onPauseOrDispose { }
+    }
 
     if (showCity) CityDialog(onDismiss = { showCity = false }) { pl ->
         showCity = false
@@ -119,6 +131,21 @@ fun SettingsScreen(onBack: () -> Unit, onLog: () -> Unit) {
             ) { if (!busy) refresh() }
         }
 
+        MLGroup("Permessi") {
+            MLNavRow(
+                "Calendario", if (CalendarRepo.hasPermission(ctx)) "Attivo" else "Per mostrare gli appuntamenti",
+                icon = Icons.Outlined.CalendarMonth, trailing = null
+            ) { if (!CalendarRepo.hasPermission(ctx)) other.launch(Manifest.permission.READ_CALENDAR) }
+            MLNavRow(
+                "Musica", if (MusicRepo.hasAccess(ctx)) "Attivo" else "Accesso alle notifiche, per vedere il brano in riproduzione",
+                icon = Icons.Outlined.MusicNote
+            ) { MusicRepo.openAccessSettings(ctx) }
+            MLNavRow(
+                "Accessori Bluetooth", if (hasBtPermission(ctx)) "Attivo" else "Per la batteria di cuffie e orologi",
+                icon = Icons.Outlined.Bluetooth, trailing = null
+            ) { if (!hasBtPermission(ctx)) other.launch(Manifest.permission.BLUETOOTH_CONNECT) }
+        }
+
         MLThemeSettingsGroup("Tema dell'app")
 
         MLGroup("App") {
@@ -142,9 +169,9 @@ private fun InfoDialog(onDismiss: () -> Unit) {
         title = { Text("MlWidget") },
         text = {
             Text(
-                "Tutti i widget delle MLapps in un posto solo, personalizzabili.\n\n" +
-                    "Widget presi da MLauncher (orologi, meteo, batteria, note, ricerca, tema Sensation) e da MLMeteo (meteo e pioggia).\n\n" +
-                    "Dati meteo: Open-Meteo (open-meteo.com), licenza CC BY 4.0."
+                "Widget per la Home in tanti stili (Material You, iOS, Sense, Retrò, Minimal), che si adattano alla grandezza e si personalizzano.\n\n" +
+                    "Dati meteo: Open-Meteo (open-meteo.com), licenza CC BY 4.0.\n" +
+                    "Nome della località: BigDataCloud (bigdatacloud.com)."
             )
         }
     )

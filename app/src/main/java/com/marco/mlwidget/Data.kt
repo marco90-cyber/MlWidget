@@ -3,7 +3,6 @@ package com.marco.mlwidget
 import android.content.Context
 import android.location.Geocoder
 import android.location.LocationManager
-import android.os.BatteryManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -119,10 +118,19 @@ object WeatherRepo {
             ""
         }
         val old = savedGps(ctx)
-        val finalName = name.ifBlank { old?.name ?: "" }
+        val near = old != null && kotlin.math.abs(old.lat - loc.latitude) < 0.02 && kotlin.math.abs(old.lon - loc.longitude) < 0.02
+        val finalName = name.ifBlank { if (near) old?.name ?: "" else "" }.ifBlank { reverseName(loc.latitude, loc.longitude) }
         sp(ctx).edit().putFloat("gpsLat", loc.latitude.toFloat()).putFloat("gpsLon", loc.longitude.toFloat())
             .putString("gpsName", finalName).apply()
         return Place(finalName, loc.latitude, loc.longitude)
+    }
+
+    /** Nome della località quando il telefono non sa dirlo (servizio gratuito senza chiave). */
+    private fun reverseName(lat: Double, lon: Double): String = try {
+        val o = JSONObject(get("https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=$lat&longitude=$lon&localityLanguage=it"))
+        o.optString("city").ifBlank { o.optString("locality") }
+    } catch (e: Exception) {
+        ""
     }
 
     fun currentPlace(ctx: Context): Place? = if (mode(ctx) == "city") city(ctx) else savedGps(ctx)
@@ -196,17 +204,10 @@ object WeatherRepo {
             sp(ctx).edit().putString("data", w.toJson()).apply()
             w
         } catch (e: Exception) {
+            AppLog.e("Meteo", e)
             null
         }
     }
-}
-
-class Battery(val level: Int, val charging: Boolean)
-
-fun readBattery(ctx: Context): Battery {
-    val bm = ctx.getSystemService(BatteryManager::class.java)
-    val lv = bm?.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)?.takeIf { it in 0..100 } ?: 100
-    return Battery(lv, bm?.isCharging == true)
 }
 
 fun weatherText(code: Int): String = when (code) {

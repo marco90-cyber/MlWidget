@@ -8,19 +8,25 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.RectF
 import android.graphics.drawable.Icon
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.provider.Settings
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.widget.RemoteViews
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -33,7 +39,6 @@ import kotlin.math.min
 
 // ---------------------------------------------------------------------------------------------
 //  I widget che si aggiungono alla Home: tutti uguali, cambia solo la grandezza di partenza.
-//  Quando se ne aggiunge uno si sceglie quale dei nostri widget mostrare.
 // ---------------------------------------------------------------------------------------------
 
 open class BaseProvider : AppWidgetProvider() {
@@ -77,9 +82,11 @@ object WidgetUpdater {
         return PROVIDERS.flatMap { m.getAppWidgetIds(ComponentName(ctx, it)).toList() }
     }
 
-    fun anyWeather(ctx: Context) = allIds(ctx).any { Store.boundTemplate(ctx, it)?.usesWeather == true }
+    fun onHome(ctx: Context): List<Template> = allIds(ctx).mapNotNull { Store.boundTemplate(ctx, it) }
 
-    /** Aggiorna tutti i widget (fuori dal thread principale). */
+    fun anyWeather(ctx: Context) = onHome(ctx).any { it.usesWeather }
+    fun anyBattery(ctx: Context) = onHome(ctx).any { it.usesBattery }
+
     fun updateAllAsync(ctx: Context) {
         val app = ctx.applicationContext
         io.execute { updateAll(app) }
@@ -90,6 +97,15 @@ object WidgetUpdater {
         allIds(ctx).forEach { update(ctx, m, it) }
     }
 
+    /** Aggiorna solo i widget di certi tipi (batteria, musica...). */
+    fun updateKindAsync(ctx: Context, kinds: Set<String>) {
+        val app = ctx.applicationContext
+        io.execute {
+            val m = AppWidgetManager.getInstance(app)
+            allIds(app).forEach { id -> if (Store.boundTemplate(app, id)?.kind in kinds) update(app, m, id) }
+        }
+    }
+
     fun updateTemplateAsync(ctx: Context, templateId: String) {
         val app = ctx.applicationContext
         io.execute {
@@ -98,8 +114,8 @@ object WidgetUpdater {
         }
     }
 
-    /** Grandezza del widget in dp (verticale). */
-    fun sizeDp(ctx: Context, m: AppWidgetManager, id: Int, t: Template?): Pair<Float, Float> {
+    /** Grandezza del widget in dp (telefono in verticale). */
+    fun sizeDp(m: AppWidgetManager, id: Int, t: Template?): Pair<Float, Float> {
         val o = m.getAppWidgetOptions(id)
         var w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0).toFloat()
         var h = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0).toFloat()
@@ -115,8 +131,7 @@ object WidgetUpdater {
     fun update(ctx: Context, m: AppWidgetManager, id: Int) {
         try {
             val t = Store.boundTemplate(ctx, id)
-            val rv = if (t == null) placeholder(ctx, id) else build(ctx, m, id, t)
-            m.updateAppWidget(id, rv)
+            m.updateAppWidget(id, if (t == null) placeholder(ctx, id) else build(ctx, m, id, t))
         } catch (e: Throwable) {
             AppLog.e("Aggiornamento widget $id", e)
         }
@@ -132,29 +147,24 @@ object WidgetUpdater {
         return rv
     }
 
-    private fun dpPx(ctx: Context) = ctx.resources.displayMetrics.density
-
-    /** Immagine del widget in chiaro o scuro, con le misure degli orologi vivi. */
     private class Pic(val bmp: Bitmap, val drawn: Drawn, val pal: Pal)
 
     private fun picture(ctx: Context, t: Template, cfg: Cfg, w: Float, h: Float, dark: Boolean, data: WData): Pic {
-        val d = dpPx(ctx)
-        val scale = min(d, 820f / max(w, h))
+        val d = ctx.resources.displayMetrics.density
+        val scale = min(d, 900f / max(w, h))
         val bmp = Bitmap.createBitmap((w * scale).toInt().coerceAtLeast(4), (h * scale).toInt().coerceAtLeast(4), Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         c.scale(scale, scale)
-        val pal = Palettes.palette(ctx, cfg.style, dark)
+        val pal = Palettes.palette(ctx, cfg.style, dark, t)
         val drawn = Renderer.draw(ctx, c, t, cfg, w, h, pal, data, drawLive = false, skipAnalog = true)
         return Pic(bmp, drawn, pal)
     }
 
     /** Quadrante o lancetta: un quadrato grande quanto l'orologio, che Android fa girare da solo. */
     private fun analogLayer(ctx: Context, rect: RectF, draw: (Canvas, RectF) -> Unit): Icon {
-        val d = dpPx(ctx)
-        val viewPx = rect.width() * d
+        val viewPx = rect.width() * ctx.resources.displayMetrics.density
         val px = min(viewPx, 460f).toInt().coerceAtLeast(8)
         val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
-        // densità scelta in modo che il disegno occupi esattamente tutto l'orologio
         bmp.density = (ctx.resources.displayMetrics.densityDpi * px / viewPx).toInt().coerceAtLeast(1)
         val c = Canvas(bmp)
         val s = px / rect.width()
@@ -163,10 +173,17 @@ object WidgetUpdater {
         return Icon.createWithBitmap(bmp)
     }
 
+    private fun place(rv: RemoteViews, vid: Int, r: RectF) {
+        rv.setViewLayoutMargin(vid, RemoteViews.MARGIN_LEFT, r.left, TypedValue.COMPLEX_UNIT_DIP)
+        rv.setViewLayoutMargin(vid, RemoteViews.MARGIN_TOP, r.top, TypedValue.COMPLEX_UNIT_DIP)
+        rv.setViewLayoutWidth(vid, r.width(), TypedValue.COMPLEX_UNIT_DIP)
+        rv.setViewLayoutHeight(vid, r.height(), TypedValue.COMPLEX_UNIT_DIP)
+    }
+
     fun build(ctx: Context, m: AppWidgetManager, id: Int, t: Template): RemoteViews {
         val cfg = Store.load(ctx, t)
-        val (w, h) = sizeDp(ctx, m, id, t)
-        val data = WData.load(ctx)
+        val (w, h) = sizeDp(m, id, t)
+        val data = WData.load(ctx, sample = false, t = t)
         val auto = cfg.style.darkMode == "auto"
         val light = picture(ctx, t, cfg, w, h, if (auto) false else Palettes.darkFor(cfg.style, false), data)
         val dark = if (auto) picture(ctx, t, cfg, w, h, true, data) else light
@@ -185,88 +202,120 @@ object WidgetUpdater {
             rv.setTextViewTextSize(vid, TypedValue.COMPLEX_UNIT_DIP, sl.textSize)
             rv.setInt(vid, "setGravity", gravityFor(sl.align))
             rv.setColorInt(vid, "setTextColor", sl.color, darkSl.color)
-            rv.setViewLayoutMargin(vid, RemoteViews.MARGIN_LEFT, sl.rect.left, TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutMargin(vid, RemoteViews.MARGIN_TOP, sl.rect.top, TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutWidth(vid, sl.rect.width() + 2f, TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutHeight(vid, sl.rect.height(), TypedValue.COMPLEX_UNIT_DIP)
+            val r = sl.rect
+            place(rv, vid, RectF(r.left - 2f, r.top, r.right + 4f, r.bottom + 2f))
         }
 
         // orologio analogico di sistema con il nostro quadrante e le nostre lancette
         val ar = light.drawn.analog
-        if (ar != null && cfg.el("analog")?.visible == true) {
+        if (ar != null) {
             val s = cfg.style
             val now = java.util.Date()
             val loc = java.util.Locale.getDefault()
-            fun dial(p: Pal) = analogLayer(ctx, ar) { c, r -> Analog.drawDial(c, r, s.dial, p, now, loc) }
-            fun hand(p: Pal, kind: String, cap: Boolean) = analogLayer(ctx, ar) { c, r -> Analog.drawHand(c, r, 0f, kind, s, p, cap) }
             rv.setViewVisibility(R.id.analog, View.VISIBLE)
-            rv.setViewLayoutMargin(R.id.analog, RemoteViews.MARGIN_LEFT, ar.left, TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutMargin(R.id.analog, RemoteViews.MARGIN_TOP, ar.top, TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutWidth(R.id.analog, ar.width(), TypedValue.COMPLEX_UNIT_DIP)
-            rv.setViewLayoutHeight(R.id.analog, ar.height(), TypedValue.COMPLEX_UNIT_DIP)
-            val sameLook = dark === light
+            place(rv, R.id.analog, ar)
+            val same = dark === light
             fun pair(make: (Pal) -> Icon): Pair<Icon, Icon> {
                 val a = make(light.pal)
-                return a to (if (sameLook) a else make(dark.pal))
+                return a to (if (same) a else make(dark.pal))
             }
-            val (dl, dd) = pair { dial(it) }
+            val (dl, dd) = pair { p -> analogLayer(ctx, ar) { c, r -> Analog.drawDial(c, r, s.dial, p, now, loc) } }
             rv.setIcon(R.id.analog, "setDial", dl, dd)
-            val (hl, hd) = pair { hand(it, "hour", false) }
+            val (hl, hd) = pair { p -> analogLayer(ctx, ar) { c, r -> Analog.drawHand(c, r, 0f, "hour", s, p) } }
             rv.setIcon(R.id.analog, "setHourHand", hl, hd)
-            val (ml, md) = pair { hand(it, "minute", !s.seconds) }
+            val (ml, md) = pair { p -> analogLayer(ctx, ar) { c, r -> Analog.drawHand(c, r, 0f, "minute", s, p, !s.seconds) } }
             rv.setIcon(R.id.analog, "setMinuteHand", ml, md)
             if (s.seconds) {
-                val (sl, sd) = pair { hand(it, "second", true) }
+                val (sl, sd) = pair { p -> analogLayer(ctx, ar) { c, r -> Analog.drawHand(c, r, 0f, "second", s, p, true) } }
                 rv.setIcon(R.id.analog, "setSecondHand", sl, sd)
             }
-        } else {
-            rv.setViewVisibility(R.id.analog, View.GONE)
+        } else rv.setViewVisibility(R.id.analog, View.GONE)
+
+        // tasti della musica
+        SlotIds.ZONES.forEach { rv.setViewVisibility(it, View.GONE) }
+        light.drawn.zones.take(3).forEachIndexed { i, (r, action) ->
+            val vid = SlotIds.ZONES[i]
+            rv.setViewVisibility(vid, View.VISIBLE)
+            place(rv, vid, r)
+            val pi = PendingIntent.getBroadcast(
+                ctx, id * 10 + i, Intent(ctx, MediaKeyReceiver::class.java).setAction("com.marco.mlwidget.KEY.$action").putExtra("key", action),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            rv.setOnClickPendingIntent(vid, pi)
         }
 
-        rv.setOnClickPendingIntent(R.id.root, tapIntent(ctx, t, id))
+        rv.setOnClickPendingIntent(R.id.root, tapIntent(ctx, t, id, data))
         return rv
     }
 
-    private fun tapIntent(ctx: Context, t: Template, id: Int): PendingIntent {
+    private fun tapIntent(ctx: Context, t: Template, id: Int, data: WData): PendingIntent {
         val pf = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        val open = Intent(ctx, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP }
-        val i: Intent = when (t.tap) {
-            "clock" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
-            "weather" -> ctx.packageManager.getLaunchIntentForPackage("com.marco.mlmeteo") ?: open.putExtra("open", "weather")
-            "battery" -> Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
-            "note" -> open.putExtra("open", "note:${t.id}")
-            "search" -> Intent("android.search.action.GLOBAL_SEARCH")
-            else -> open
+        val open = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        if (t.kind == "weather" || t.kind == "glance") {
+            // toccando il meteo si aggiorna subito
+            return PendingIntent.getBroadcast(ctx, id, Intent(ctx, RefreshReceiver::class.java).setAction(RefreshReceiver.WEATHER), pf)
         }
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        val resolved = i.resolveActivity(ctx.packageManager) != null
-        return PendingIntent.getActivity(ctx, id, if (resolved) i else open.putExtra("open", "edit:${t.id}"), pf)
+        val i: Intent? = when (t.kind) {
+            "digital", "analog", "flip", "lcd" -> Intent(AlarmClock.ACTION_SHOW_ALARMS)
+            "battery" -> Intent(Intent.ACTION_POWER_USAGE_SUMMARY)
+            "device" -> Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)
+            "calendar", "tearoff" -> if (!data.calendarAllowed) Intent(open).putExtra("open", "calendar")
+                else Intent(Intent.ACTION_VIEW).setData(
+                    CalendarContract.CONTENT_URI.buildUpon().appendPath("time").appendPath(System.currentTimeMillis().toString()).build()
+                )
+            "music", "ipod" -> {
+                if (!data.musicAllowed) Intent(open).putExtra("open", "music")
+                else data.track?.pkg?.takeIf { it.isNotBlank() }?.let { ctx.packageManager.getLaunchIntentForPackage(it) }
+                    ?: Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_MUSIC)
+            }
+            "note" -> Intent(open).putExtra("open", "edit:${t.id}")
+            "search" -> Intent(Intent.ACTION_WEB_SEARCH)
+            else -> null
+        }
+        val target = i?.takeIf { it.resolveActivity(ctx.packageManager) != null } ?: Intent(open).putExtra("open", "edit:${t.id}")
+        target.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return PendingIntent.getActivity(ctx, id, target, pf)
     }
 }
 
+fun gravityFor(align: String) = when (align) {
+    "left" -> Gravity.START or Gravity.CENTER_VERTICAL
+    "right" -> Gravity.END or Gravity.CENTER_VERTICAL
+    else -> Gravity.CENTER
+}
+
 // ---------------------------------------------------------------------------------------------
-//  Aggiornamenti: ogni 15 minuti (meteo e batteria) e a mezzanotte (data)
+//  Aggiornamenti
+//  - meteo: ogni 15/30/60 minuti (WorkManager)
+//  - batteria: quando cambia (con l'app in memoria) e comunque ogni 10 minuti
+//  - data: a mezzanotte; calendario: quando cambia un appuntamento
 // ---------------------------------------------------------------------------------------------
 
 object Refresh {
     fun schedule(ctx: Context) {
-        val wm = WorkManager.getInstance(ctx)
-        wm.enqueueUniquePeriodicWork(
+        WorkManager.getInstance(ctx).enqueueUniquePeriodicWork(
             "refresh", ExistingPeriodicWorkPolicy.KEEP,
             PeriodicWorkRequestBuilder<RefreshWorker>(15, TimeUnit.MINUTES).build()
         )
         scheduleMidnight(ctx)
+        scheduleBattery(ctx)
     }
 
-    /** Aggiorna subito (scarica il meteo se serve). */
+    /** Aggiorna subito (scarica il meteo se serve), appena c'è la rete. */
     fun now(ctx: Context, forceWeather: Boolean = false) {
         WorkManager.getInstance(ctx).enqueueUniqueWork(
             "refresh_now", ExistingWorkPolicy.REPLACE,
-            OneTimeWorkRequestBuilder<RefreshWorker>().setInputData(
-                androidx.work.Data.Builder().putBoolean("force", forceWeather).build()
-            ).build()
+            OneTimeWorkRequestBuilder<RefreshWorker>()
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setInputData(androidx.work.Data.Builder().putBoolean("force", forceWeather).build())
+                .build()
         )
     }
+
+    private fun pi(ctx: Context, action: String, code: Int) = PendingIntent.getBroadcast(
+        ctx, code, Intent(ctx, RefreshReceiver::class.java).setAction(action),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     fun scheduleMidnight(ctx: Context) {
         val am = ctx.getSystemService(AlarmManager::class.java) ?: return
@@ -274,15 +323,15 @@ object Refresh {
             add(Calendar.DAY_OF_YEAR, 1)
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 5); set(Calendar.MILLISECOND, 0)
         }
-        val pi = PendingIntent.getBroadcast(
-            ctx, 1, Intent(ctx, RefreshReceiver::class.java).setAction("com.marco.mlwidget.MIDNIGHT"),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        try {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi)
-        } catch (e: Exception) {
-            AppLog.e("Sveglia di mezzanotte", e)
-        }
+        try { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, cal.timeInMillis, pi(ctx, RefreshReceiver.MIDNIGHT, 1)) } catch (e: Exception) { }
+    }
+
+    /** Ogni 10 minuti ridisegna batteria e dispositivo (solo se sulla Home ce n'è uno). */
+    fun scheduleBattery(ctx: Context) {
+        val am = ctx.getSystemService(AlarmManager::class.java) ?: return
+        val p = pi(ctx, RefreshReceiver.BATTERY, 2)
+        if (!WidgetUpdater.anyBattery(ctx)) { am.cancel(p); return }
+        try { am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 10 * 60_000L, p) } catch (e: Exception) { }
     }
 }
 
@@ -290,25 +339,100 @@ class RefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ct
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         val force = inputData.getBoolean("force", false)
-        if (WidgetUpdater.anyWeather(ctx) && (force || WeatherRepo.isOld(ctx))) WeatherRepo.fetch(ctx)
+        if (force || (WidgetUpdater.anyWeather(ctx) && WeatherRepo.isOld(ctx))) WeatherRepo.fetch(ctx)
         WidgetUpdater.updateAll(ctx)
         Refresh.scheduleMidnight(ctx)
+        Refresh.scheduleBattery(ctx)
         return Result.success()
     }
 }
 
-/** Mezzanotte, cambio di ora/fuso/lingua, riavvio: ridisegna i widget. */
+/** Mezzanotte, batteria, cambio di ora/fuso/lingua, calendario, riavvio: ridisegna i widget. */
 class RefreshReceiver : BroadcastReceiver() {
+    companion object {
+        const val MIDNIGHT = "com.marco.mlwidget.MIDNIGHT"
+        const val BATTERY = "com.marco.mlwidget.BATTERY"
+        const val WEATHER = "com.marco.mlwidget.WEATHER"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
+        val app = context.applicationContext
+        when (intent.action) {
+            WEATHER -> {
+                android.widget.Toast.makeText(app, "Aggiorno il meteo…", android.widget.Toast.LENGTH_SHORT).show()
+                Refresh.now(app, true)
+                return
+            }
+            BATTERY -> {
+                Refresh.scheduleBattery(app)
+                WidgetUpdater.updateKindAsync(app, setOf("battery", "device"))
+                return
+            }
+            Intent.ACTION_PROVIDER_CHANGED -> {
+                WidgetUpdater.updateKindAsync(app, setOf("calendar", "tearoff"))
+                return
+            }
+        }
         val pending = goAsync()
         Thread {
             try {
-                WidgetUpdater.updateAll(context.applicationContext)
-                Refresh.schedule(context.applicationContext)
+                WidgetUpdater.updateAll(app)
+                Refresh.schedule(app)
             } finally {
                 pending.finish()
             }
         }.start()
+    }
+}
+
+/** Con l'app in memoria la batteria si ridisegna a ogni punto percentuale e quando si collega il caricatore. */
+object BatteryWatcher {
+    private var lastLevel = -1
+    private var lastCharging: Boolean? = null
+
+    fun start(ctx: Context) {
+        val app = ctx.applicationContext
+        val rec = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val l = i.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+                val sc = i.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100)
+                val level = if (l >= 0 && sc > 0) l * 100 / sc else -1
+                val charging = i.getIntExtra(android.os.BatteryManager.EXTRA_PLUGGED, 0) != 0
+                if (level != lastLevel || charging != lastCharging) {
+                    lastLevel = level; lastCharging = charging
+                    WidgetUpdater.updateKindAsync(app, setOf("battery", "device"))
+                }
+            }
+        }
+        try {
+            app.registerReceiver(rec, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val bt = IntentFilter().apply {
+                addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED")
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_CONNECTED)
+                addAction(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            }
+            androidx.core.content.ContextCompat.registerReceiver(app, object : BroadcastReceiver() {
+                override fun onReceive(c: Context, i: Intent) {
+                    try {
+                        @Suppress("DEPRECATION")
+                        val dev = i.getParcelableExtra<android.bluetooth.BluetoothDevice>(android.bluetooth.BluetoothDevice.EXTRA_DEVICE)
+                        val lv = i.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1)
+                        if (dev != null && lv in 0..100 && hasBtPermission(app)) AccessoryCache.levels[dev.address] = lv
+                    } catch (e: Throwable) { }
+                    WidgetUpdater.updateKindAsync(app, setOf("battery"))
+                }
+            }, bt, androidx.core.content.ContextCompat.RECEIVER_EXPORTED)
+        } catch (e: Exception) {
+            AppLog.e("Batteria", e)
+        }
+    }
+}
+
+/** Tasti della musica sui widget. */
+class MediaKeyReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        MusicRepo.key(context, intent.getStringExtra("key") ?: "play")
+        WidgetUpdater.updateKindAsync(context, setOf("music", "ipod"))
     }
 }
 
@@ -321,12 +445,11 @@ class PinReceiver : BroadcastReceiver() {
         Store.bind(context, id, tpl)
         WidgetUpdater.update(context, AppWidgetManager.getInstance(context), id)
         Refresh.schedule(context)
+        if (Templates.byId(tpl)?.usesWeather == true && WeatherRepo.isOld(context)) Refresh.now(context, true)
     }
 }
 
 object Pin {
-    fun supported(ctx: Context) = AppWidgetManager.getInstance(ctx).isRequestPinAppWidgetSupported
-
     fun request(ctx: Context, t: Template): Boolean {
         val m = AppWidgetManager.getInstance(ctx)
         if (!m.isRequestPinAppWidgetSupported) return false
@@ -338,9 +461,9 @@ object Pin {
     }
 }
 
-/** Gravità dei testi (usata dall'anteprima per allinearsi come il widget vero). */
-fun gravityFor(align: String) = when (align) {
-    "left" -> Gravity.START or Gravity.CENTER_VERTICAL
-    "right" -> Gravity.END or Gravity.CENTER_VERTICAL
-    else -> Gravity.CENTER
+/** Un appuntamento è cambiato: ridisegna i calendari. */
+class CalendarReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        WidgetUpdater.updateKindAsync(context, setOf("calendar", "tearoff"))
+    }
 }
